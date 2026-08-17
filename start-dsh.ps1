@@ -39,10 +39,18 @@ try {
 
     # The job runs in its own runspace and inherits nothing, so the path is
     # passed in explicitly.
-    $job = Start-Job -ArgumentList $repoPath -ScriptBlock {
-        param($RepoRoot)
+    # Optional Cordis overlays for MCP servers (none are enabled by default).
+    # Point this at any .cordis.yml file(s) to load; leave empty to skip.
+    $patchPath = "C:\Users\lkelly\supabase-keys\supabase.cordis.yml"
+
+    $job = Start-Job -ArgumentList $repoPath, $patchPath -ScriptBlock {
+        param($RepoRoot, $Patch)
         Set-Location $RepoRoot
-        & pnpm dsh web 2>&1
+        if ($Patch -and (Test-Path $Patch)) {
+            & pnpm dsh web --patch $Patch 2>&1
+        } else {
+            & pnpm dsh web 2>&1
+        }
     }
 
     $maxWait = 90

@@ -7,7 +7,8 @@ REM    1. Verify Node.js and Git
 REM    2. Install pnpm if missing
 REM    3. Clone the repository
 REM    4. Install dependencies and build
-REM    5. Create the Desktop shortcut
+REM    5. Apply team config (models, plugins, time-context)
+REM    6. Create the Desktop shortcut
 REM
 REM  Prerequisite: Node.js 22.19+ (https://nodejs.org)
 REM  Time: ~25-30 minutes on first run
@@ -111,9 +112,34 @@ if errorlevel 1 (
 )
 echo   [OK] Build complete
 
-REM ---------------- Step 5: shortcut ----------------
+REM ---------------- Step 5: apply team config ----------------
 echo.
-echo [5/5] Creating Desktop shortcut...
+echo [5/6] Applying team configuration...
+
+set "DSH_DIR=%USERPROFILE%\.dsh"
+set "DSH_PROFILE_DIR=%DSH_DIR%\profiles\web"
+set "CONFIG_SRC=%INSTALL_DIR%dsh-config"
+
+REM Create .dsh dirs if they don't exist yet
+if not exist "%DSH_DIR%" mkdir "%DSH_DIR%"
+if not exist "%DSH_PROFILE_DIR%" mkdir "%DSH_PROFILE_DIR%"
+
+REM Copy settings.yaml only if the user has no existing config (don't overwrite their keys)
+if not exist "%DSH_DIR%\settings.yaml" (
+    copy /Y "%CONFIG_SRC%\settings.yaml" "%DSH_DIR%\settings.yaml" >nul
+    echo   [OK] settings.yaml applied (OpenRouter models + web search config)
+) else (
+    echo   [--] settings.yaml already exists - skipping to preserve your API keys
+    echo        To reset to team defaults: copy "%CONFIG_SRC%\settings.yaml" "%DSH_DIR%\settings.yaml"
+)
+
+REM Always update cordis.patch.yml (time-context plugin, no secrets)
+copy /Y "%CONFIG_SRC%\cordis.patch.yml" "%DSH_PROFILE_DIR%\cordis.patch.yml" >nul
+echo   [OK] cordis.patch.yml applied (time-context plugin - agent knows current date/time)
+
+REM ---------------- Step 6: shortcut ----------------
+echo.
+echo [6/6] Creating Desktop shortcut...
 powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%INSTALL_DIR%\create-shortcut.ps1"
 if errorlevel 1 (
     echo [ERROR] Shortcut creation failed.
@@ -131,10 +157,15 @@ echo.
 echo Next steps:
 echo   1. Double-click "DeepSeek Harness" on your Desktop
 echo   2. Your browser opens to http://127.0.0.1:3080
-echo   3. Go to Settings ^> Models and add your API key
+echo   3. Go to Settings ^> Models ^> openrouter and add your API key
 echo        OpenRouter: https://openrouter.ai/settings/keys
+echo   4. Go to Settings ^> Plugins ^> Web search and add your DeepSeek key
 echo        DeepSeek:   https://platform.deepseek.com
-echo   4. Click Apply, pick a model, start chatting
+echo   5. Click Apply, pick a model, start chatting
+echo.
+echo Models pre-configured: Auto Router, DeepSeek V4, Qwen3, Gemini Flash Image
+echo Web search: enabled (requires your DeepSeek API key)
+echo Time awareness: enabled (agent always knows the current date/time)
 echo.
 echo Close the PowerShell window to stop the server.
 echo.

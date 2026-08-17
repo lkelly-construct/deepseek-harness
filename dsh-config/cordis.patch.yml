@@ -1,0 +1,9 @@
+# DSH profile patch — applied on top of the standard web profile bundles.
+# Adds the time-context plugin so the agent always knows the current date/time.
+# Change timeZone to match your local IANA zone if you're not in Central Time.
+# Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+- insert:
+    - id: time-context
+      name: '@deepseek-ai/dsh-time-context'
+      config:
+        timeZone: America/Chicago

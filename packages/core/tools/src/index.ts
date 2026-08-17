@@ -132,6 +132,7 @@ export type {
   WebSearchResultView,
   WebFetchResultView,
   WebSource,
+  HtmlPreviewResultView,
 } from './presentation.ts'
 
 declare module '@deepseek-ai/cordis' {

@@ -34,7 +34,8 @@
 }
 
 .read,
-.web {
+.web,
+.htmlPreview {
   margin: 0;
 }
 

@@ -1,7 +1,8 @@
 /** Card-aware output body for the selected Tool call in details. */
-import { DiffBlock, ReadBlock, SearchBlock, TerminalBlock, WebBlock } from '@deepseek-ai/dsh-client-ui-primitives'
+import { DiffBlock, HtmlPreviewBlock, ReadBlock, SearchBlock, TerminalBlock, WebBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolDetailsProps } from '../contract/slots.ts'
 import { diffCardModel } from './models/diff-card-model.ts'
+import { htmlPreviewCardModel } from './models/html-preview-card-model.ts'
 import { readCardModel } from './models/read-card-model.ts'
 import { searchCardModel } from './models/search-card-model.ts'
 import { terminalBlockLabels, terminalCardModel } from './models/terminal-card-model.ts'
@@ -53,6 +54,16 @@ export function ToolDetails({ block, cwd, t }: ToolDetailsContentProps) {
     return (
       <>
         <WebBlock {...web} className={css.web} />
+        {body !== '' ? <pre className={css.code}>{body}</pre> : null}
+      </>
+    )
+  }
+  const htmlPreview = htmlPreviewCardModel(block)
+  if (htmlPreview !== null) {
+    const body = 'kind' in block ? resultText(block) : ''
+    return (
+      <>
+        <HtmlPreviewBlock {...htmlPreview} className={css.htmlPreview} />
         {body !== '' ? <pre className={css.code}>{body}</pre> : null}
       </>
     )

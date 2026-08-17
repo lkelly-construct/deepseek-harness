@@ -137,7 +137,7 @@ export interface ReadFileLine {
  * `ToolDefinition.presentResult`; omitting the method keeps the pending
  * title and renders the raw result content.
  */
-export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView
+export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView | HtmlPreviewResultView
 
 /**
  * The default completed card: an optional replacement title and reformatted
@@ -308,13 +308,44 @@ export interface ReadResultView {
 }
 
 /**
+ * A completed HTML preview rendered in a sandboxed iframe by a capable UI. Set
+ * by an html-preview tool whose call produces live-renderable HTML (e.g.
+ * `render_html`). The pending state stays a {@link GenericCallView} because the
+ * HTML is not available until `execute` returns. A UI without the html-preview
+ * capability falls back to `content` (the model-facing text), so this view
+ * degrades gracefully.
+ *
+ * The HTML source is passed via `srcdoc` into a sandboxed `<iframe>` — never
+ * injected into the DOM directly — so it cannot access the parent page or
+ * execute scripts outside the iframe's own context. The `sandbox` field lets
+ * the tool declare what capabilities the preview needs; absent defaults to
+ * `'allow-scripts'` only.
+ */
+export interface HtmlPreviewResultView {
+  card: 'html-preview'
+  /** Replacement title for the completed call. Omit to keep the pending-state title. */
+  title?: string
+  /** The complete HTML source to render in the iframe. */
+  html: string
+  /**
+   * Preferred width hint in pixels for the iframe viewport. Absent uses the
+   * container's natural width.
+   */
+  width?: number | undefined
+  /**
+   * Sandbox directives for the iframe. Defaults to `'allow-scripts'` when
+   * absent. Pass `'none'` for maximum isolation (no scripts, no same-origin).
+   */
+  sandbox?: string | undefined
+}
+/**
  * One citeable source in a completed {@link WebSearchResultView}, the faithful
  * projection of one web-search source. The presentation projection of `dsh-web`'s
- * `WebSearchSource`: that Service Definition type is authoritative (core cannot depend
- * on the web Service Definition, so the two are declared separately and MUST evolve together).
- * A web tool projects this shape through `output.presentationMeta` because the
- * render text cannot losslessly carry it (see the web-result-card Agent Note); its
- * `presentResult` reads it back.
+ * `WebSearchSource`: that Service Definition type is authoritative (core cannot
+ * depend on the web Service Definition, so the two are declared separately and
+ * MUST evolve together). A web tool projects this shape through
+ * `output.presentationMeta` because the render text cannot losslessly carry it
+ * (see the web-result-card Agent Note); its `presentResult` reads it back.
  */
 export interface WebSource {
   /** The source URL. */

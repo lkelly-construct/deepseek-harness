@@ -20,7 +20,7 @@
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  CodeBlock, DiffBlock, DisclosureRow, IconInspectOutline12, ReadBlock, SearchBlock, StateDot, TerminalBlock, WebBlock,
+  CodeBlock, DiffBlock, DisclosureRow, HtmlPreviewBlock, IconInspectOutline12, ReadBlock, SearchBlock, StateDot, TerminalBlock, WebBlock,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WebBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -29,6 +29,7 @@ import { CHAT_READ_MAX_LINES, type ReadCardModel } from '../models/read-card-mod
 import { CHAT_SEARCH_MAX_LINES, type SearchCardModel } from '../models/search-card-model.ts'
 import { terminalBlockLabels, type TerminalCardModel } from '../models/terminal-card-model.ts'
 import type { ToolRowState, ToolRowVariant } from '../models/tool-call-model.ts'
+import type { HtmlPreviewBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './ToolRow.module.css'
 
 export interface ToolRowProps {
@@ -86,6 +87,12 @@ export interface ToolRowProps {
    * list or fetched-source card when present.
    */
   web?: WebBlockProps | null | undefined
+  /**
+   * Html-preview-card material for a call whose render intent is an html-preview
+   * card (derived by `htmlPreviewCardModel`); it replaces the text body with a
+   * sandboxed iframe preview when present.
+   */
+  htmlPreview?: HtmlPreviewBlockProps | null | undefined
   state: ToolRowState
   /**
    * Filesystem path from tool args; when set with onOpenFile, the summary
@@ -141,6 +148,7 @@ export function ToolRow({
   read,
   search,
   web,
+  htmlPreview,
   state,
   filePath,
   onOpenFile,
@@ -152,11 +160,12 @@ export function ToolRow({
   const readBody = read ?? null
   const searchBody = search ?? null
   const webBody = web ?? null
+  const htmlPreviewBody = htmlPreview ?? null
   const outputText = output ?? null
   // A card replaces the text body; a call carries at most one card kind, so the
   // card props are mutually exclusive. Any of them, or a text body/output,
   // makes the row expandable.
-  const card = terminalBody ?? diffBody ?? readBody ?? searchBody ?? webBody
+  const card = terminalBody ?? diffBody ?? readBody ?? searchBody ?? webBody ?? htmlPreviewBody
   const expandable = body !== null || outputText !== null || card !== null
   const open = expanded && expandable
   // The run-state label AT needs: the StateDot and the running sweep are both
@@ -260,7 +269,9 @@ export function ToolRow({
                   )
                   : webBody !== null
                     ? <WebBlock {...webBody} className={css.webBody} />
-                    : (
+                    : htmlPreviewBody !== null
+                      ? <HtmlPreviewBlock {...htmlPreviewBody} labels={{ copyLabel: t('copy'), copiedLabel: t('copied') }} className={css.htmlPreviewBody} />
+                      : (
                       <>
                         {variant === 'code' && body !== null && (
                           <div className={css.bodyScroll}>

@@ -28,7 +28,8 @@ echo.
 
 REM --- If this file already sits inside a checkout, use that checkout. ---
 if exist "%~dp0start-dsh.ps1" if exist "%~dp0package.json" (
-    set "INSTALL_DIR=%~dp0"
+    set "INSTALL_DIR=%~dp0."
+    for %%I in ("!INSTALL_DIR!") do set "INSTALL_DIR=%%~fI"
     echo Using existing checkout: !INSTALL_DIR!
 )
 
@@ -37,7 +38,7 @@ echo Install to:  %INSTALL_DIR%
 echo.
 
 REM ---------------- Step 1: prerequisites ----------------
-echo [1/5] Checking prerequisites...
+echo [1/6] Checking prerequisites...
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -75,7 +76,7 @@ if errorlevel 1 (
 
 REM ---------------- Step 2: get the code ----------------
 echo.
-echo [2/5] Getting the code...
+echo [2/6] Getting the code...
 if exist "%INSTALL_DIR%\.git" (
     echo   [OK] Repository already present
 ) else (
@@ -92,7 +93,7 @@ cd /d "%INSTALL_DIR%"
 
 REM ---------------- Step 3: dependencies ----------------
 echo.
-echo [3/5] Installing dependencies (a few minutes)...
+echo [3/6] Installing dependencies (a few minutes)...
 call pnpm install
 if errorlevel 1 (
     echo [ERROR] pnpm install failed.
@@ -103,7 +104,7 @@ echo   [OK] Dependencies installed
 
 REM ---------------- Step 4: build ----------------
 echo.
-echo [4/5] Building (10-15 minutes - this is normal)...
+echo [4/6] Building (10-15 minutes - this is normal)...
 call pnpm run build
 if errorlevel 1 (
     echo [ERROR] Build failed.
@@ -118,7 +119,7 @@ echo [5/6] Applying team configuration...
 
 set "DSH_DIR=%USERPROFILE%\.dsh"
 set "DSH_PROFILE_DIR=%DSH_DIR%\profiles\web"
-set "CONFIG_SRC=%INSTALL_DIR%dsh-config"
+set "CONFIG_SRC=%INSTALL_DIR%\dsh-config"
 
 REM Create .dsh dirs if they don't exist yet
 if not exist "%DSH_DIR%" mkdir "%DSH_DIR%"
@@ -140,7 +141,7 @@ echo   [OK] cordis.patch.yml applied (time-context plugin - agent knows current 
 REM ---------------- Step 6: shortcut ----------------
 echo.
 echo [6/6] Creating Desktop shortcut...
-powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%INSTALL_DIR%\create-shortcut.ps1"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -NoProfile -File "%INSTALL_DIR%\create-shortcut.ps1"
 if errorlevel 1 (
     echo [ERROR] Shortcut creation failed.
     pause

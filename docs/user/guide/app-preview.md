@@ -1,7 +1,5 @@
 # Preview the app you are building
 
-English | [中文](app-preview.zh.md)
-
 The Web UI can render the app an agent is building in a live, sandboxed window. Once the agent starts the app's dev server, it surfaces the running `http://localhost:<port>` URL as an `app-preview` card in the conversation. You look at the running app and ask for adjustments, and the agent edits the code and re-surfaces the preview.
 
 ## What the preview is

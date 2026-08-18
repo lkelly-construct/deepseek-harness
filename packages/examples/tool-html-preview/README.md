@@ -1,7 +1,5 @@
 # @deepseek-ai/dsh-tool-html-preview
 
-English | [中文](README.zh.md)
-
 The model-facing `render_html` tool: a pass-through view producer that returns an `html-preview` GUI card rendering whatever HTML the model supplies.
 
 ## What it does

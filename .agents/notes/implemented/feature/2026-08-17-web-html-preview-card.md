@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-08-17-web-html-preview-card.zh.md)
-
 ## Problem
 
 A tool that produces HTML (a page mockup, a chart wrapper, a report template) had no way to show a user the rendered result. The result surface on the wire is model-facing text only; the markdown renderer deliberately keeps raw HTML out of the DOM, so untrusted HTML never enters the page ([web-assistant-markdown](2026-07-23-web-assistant-markdown.md)). A user editing such a file in a Harness session sees the markup, not the page. Claude Code answers this with a live preview of generated HTML; the Harness render-intent vocabulary ([tool-render-intent-union](../architecture/2026-07-02-tool-render-intent-union.md)) has no card that says "this result is HTML, show it in a sandboxed iframe".

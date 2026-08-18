@@ -90,15 +90,14 @@ function mirroredPages(pages: MirroredPage[]): DocsPage[] {
 
 function pairedPages(pages: PairedPage[]): DocsPage[] {
   return mirroredPages(pages.map((page) => {
-    const chineseSource = page.source.replace(/\.md$/, '.zh.md')
     const sharedAliases = page.sourceAliases ?? []
     return {
       ...page,
-      source: { root: chineseSource, en: page.source },
-      contentLocale: { root: 'zh-CN', en: 'en-US' },
+      source: { root: page.source, en: page.source },
+      contentLocale: { root: 'en-US', en: 'en-US' },
       sourceAliases: {
-        root: [...sharedAliases, page.source],
-        en: [...sharedAliases, chineseSource],
+        root: sharedAliases,
+        en: sharedAliases,
       },
     }
   }))

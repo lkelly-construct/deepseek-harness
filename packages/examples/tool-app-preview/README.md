@@ -1,7 +1,5 @@
 # @deepseek-ai/dsh-tool-app-preview
 
-English | [中文](README.zh.md)
-
 The model-facing `render_app_url` tool: a pass-through view producer that returns an `app-preview` GUI card rendering a running app's localhost URL.
 
 ## What it does

@@ -250,13 +250,6 @@ const EXACT_EDITS: readonly ExactEdit[] = [
     expect: 1,
   },
   {
-    id: 'agent-spine-demo-mounted-tree-zh',
-    file: 'packages/examples/agent-spine-demo/README.zh.md',
-    find: '@cordisjs/plugin-timer            timer service',
-    replace: '@deepseek-ai/cordis-plugin-timer  timer service',
-    expect: 1,
-  },
-  {
     // The root contract claimed vendored packages keep their upstream names.
     id: 'root-agents-vendored-name-contract',
     file: 'AGENTS.md',
@@ -301,25 +294,11 @@ const VENDORED_LIBRARY = /^@deepseek-ai\\/(cosmokit|schemastery)(\\/|$)/
     expect: 1,
   },
   {
-    id: 'vendoring-cookbook-tree-comment-zh',
-    file: 'docs/cookbook/adding-a-vendored-package.zh.md',
-    find: '  package.json     # from upstream; set "private": true, keep name/exports/type',
-    replace: '  package.json     # from upstream; set "private": true, rescope the name, keep exports/type',
-    expect: 1,
-  },
-  {
     // The checklist told the next vendoring to keep upstream's name.
     id: 'vendoring-cookbook-name-invariant',
     file: 'docs/cookbook/adding-a-vendored-package.md',
     find: "keep upstream's `name`/`version`/`exports`/`type`",
     replace: "rescope the `name` ([mapping](../rescope.md)) while keeping upstream's `version`/`exports`/`type`",
-    expect: 1,
-  },
-  {
-    id: 'vendoring-cookbook-name-invariant-zh',
-    file: 'docs/cookbook/adding-a-vendored-package.zh.md',
-    find: '保留上游的 `name`/`version`/`exports`/`type`',
-    replace: '改写 `name` 的 scope（[映射](../rescope.md)），保留上游的 `version`/`exports`/`type`',
     expect: 1,
   },
   {

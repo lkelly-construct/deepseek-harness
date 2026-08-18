@@ -2,8 +2,6 @@
 
 Status: implemented
 
-English | [中文](2026-08-18-web-app-preview-card.zh.md)
-
 ## Problem
 
 A user building an application in a Harness session has no way to see the running app as it forms. The closest shipped preview, the [html preview card](2026-08-17-web-html-preview-card.md), renders a *static HTML snapshot* the model supplies through `srcdoc`; it cannot display a live dev server whose HTML, scripts, and assets come from a server the model started over bash. The render-intent vocabulary ([tool-render-intent-union](../architecture/2026-07-02-tool-render-intent-union.md)) has no card that says "this result is a live localhost URL, load it in a sandboxed iframe". Claude Code answers this by opening the running app in a window; the Harness web GUI has no such live-app surface.

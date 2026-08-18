@@ -52,6 +52,14 @@
   name: '@deepseek-ai/dsh-tool-pwsh'
   disabled: !!js process.platform !== 'win32'
 
+# ── live app preview ────────────────────────────────────────────────────────
+
+# `render_app_url` renders a sandboxed iframe card for a dev-server URL. It
+# registers into the host `tools` registry and provides nothing, so it needs no
+# realm.
+- id: tool-app-preview
+  name: '@deepseek-ai/dsh-tool-app-preview'
+
 # ── filesystem ──────────────────────────────────────────────────────────────
 
 # Both register into the host `tools` registry and provide nothing, so

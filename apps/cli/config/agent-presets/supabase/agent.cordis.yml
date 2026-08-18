@@ -1,0 +1,23 @@
+# Supabase agent preset — standard tools + Supabase MCP.
+# Requires SUPABASE_ACCESS_TOKEN in the environment.
+
+- id: tool-app-preview
+  name: '@deepseek-ai/dsh-tool-app-preview'
+
+- id: supabase-mcp
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    transport: stdio
+    serverName: supabase
+    command: npx
+    args:
+      - -y
+      - '@supabase/mcp-server-supabase@latest'
+    env:
+      SUPABASE_ACCESS_TOKEN: !!js process.env.SUPABASE_ACCESS_TOKEN
+    failOnStartupError: false
+    reconnect:
+      enabled: true
+      initialDelayMs: 1000
+      maxDelayMs: 30000
+      maxAttempts: 5

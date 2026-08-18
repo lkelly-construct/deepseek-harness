@@ -882,13 +882,21 @@ There is no `ctx.llm.middleware`. The real per-request seam is the
 
 Three constraints that shape any design:
 
-1. **The seam is already occupied.** `installModelSelection`
+1. **Ordering in the waterfall matters.** `installModelSelection`
    (`packages/core/agent/src/model-selection.ts`) registers an `agent/request`
-   listener that **overwrites** `provider`/`model` after `await next()`. A
-   router registered beneath it gets clobbered. Ordering is the whole problem.
-2. **`prepareCall` cannot be used to swap models.** It `deepFreeze`s the config
+   listener on the agent-scoped context at agent creation time. A router
+   plugin registered on the HOST context registers its listener BEFORE any agent
+   is created, making it the outermost wrapper in the Cordis waterfall. The
+   outermost listener calls `await next()` (which runs `installModelSelection`),
+   receives the model-selection-applied config, and can then override it. This
+   ordering works correctly — the router gets the final say, not `installModelSelection`.
+   The original claim that "a router registered beneath it gets clobbered" was
+   based on confusing host-plane registration order with agent-scoped registration
+   order.
+2. **`prepareCall` cannot be used to swap models late.** It validates the config
    and `stream()` throws `INVALID_PREPARED_CALL` if the dispatched options
-   don't equal the resolved config. Late substitution is designed out.
+   don't equal the resolved config. The router must produce its final config
+   INSIDE the `agent/request` waterfall, not after `prepareCall`.
 3. **`llm/stream` is the wrong layer.** Rewriting there desyncs the logged
    `request/header` / `request/context` events the loop appends from the
    pre-dispatch config, violating the repo's model-visible ⟺ logged rule.
@@ -900,10 +908,45 @@ per-auxiliary-call-site, where compaction
 (`packages/session/session-title-llm/src/index.ts`) bypass the loop entirely and
 build their own `LlmCallConfig` for `ctx.llm.stream()`.
 
-#### The design question to answer first
-Is routing per **step** (fits `agent/request`, must coordinate with
-`installModelSelection`) or per **tool call** (no seam exists; would need a new
-one)? Answer that before writing code.
+#### Viable design path (per-step routing)
+
+A host-plane router plugin CAN be implemented:
+
+```ts
+// packages/routing/model-router/src/index.ts
+export const name = 'model-router'
+export const inject = ['llm']  // ensure provider is registered
+
+export function apply(ctx: Context): void {
+  // Registered on host context = outermost in agent/request waterfall.
+  // installModelSelection registers at agent creation (later) so it is inner.
+  ctx.on('agent/request', async ({ turn, step }, next) => {
+    const config = await next()  // gets installModelSelection's choice
+    // Example: use a lighter model on step 0 for planning, heavier for later steps
+    if (step === 0 && turn > 0) {
+      return { ...config, provider: 'openrouter', model: 'anthropic/claude-haiku-4-5' }
+    }
+    return config
+  })
+}
+```
+
+The routing policy can key on `{ turn, step }` from the payload and any
+session-level state the plugin tracks. The selected provider must be registered
+with `ctx.llm` before the waterfall fires.
+
+**Per-tool routing is not possible within a single agent session** — at
+`agent/request` time, the model has not yet been called, so there is no tool
+call to key on. Route tool-specific tasks to a specialized subagent instead,
+which already works via `tool-subagent` with `agentOptions.model`.
+
+#### Answer the design question before starting
+
+Decide: static policy (always use model X for step 0) or dynamic policy
+(the model signals "use a cheaper model for this subtask" via a tool call
+that records a flag, which the router reads on the next step). Dynamic policy
+requires a tool that writes session-level routing hints and a router that reads
+them. Both are implementable; static is simpler.
 
 ---
 

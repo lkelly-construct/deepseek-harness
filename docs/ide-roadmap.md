@@ -383,11 +383,16 @@ Commit: `fix(shell): T1-3 Windows PowerShell parity`
 
 #### Design constraints (these drive the implementation)
 
-- The `systemPrompt.section` text callback is **synchronous**. File reads must
-  be preloaded into an in-memory cache.
+- The `systemPrompt.section` text callback is **synchronous**. You cannot
+  `await` inside it.
 - Per-session cwd comes from `context.agent.session.header.cwd`.
-- Preload on `agent/created` — the same event `packages/schedule/schedule` uses
-  — so the cache is warm before the first assembly.
+- **Do not preload from a lifecycle event.** `agent/created` and
+  `agent/session-start` are both `@mode emit` and neither awaits a returned
+  promise (`agent/created`'s JSDoc: a returned-promise rejection is merely
+  "reported"). A fire-and-forget async preload races the first assembly, so the
+  first turn silently sees no memories. Instead read **synchronously** inside
+  the section callback, cached per cwd and invalidated after a write. Memory
+  files are a few small markdown files read once per workspace.
 - Consider `ctx.storage` (`packages/storage/storage-json`) instead of raw `fs`;
   read that package's API before deciding. Raw `fs` under `~/.dsh/memory/` is
   the simpler path and is specified below.
@@ -402,7 +407,8 @@ Commit: `fix(shell): T1-3 Windows PowerShell parity`
 
    ```ts
    import { createHash } from 'node:crypto'
-   import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises'
+   import { readdirSync, readFileSync } from 'node:fs'
+   import { mkdir, unlink, writeFile } from 'node:fs/promises'
    import { homedir } from 'node:os'
    import { join } from 'node:path'
 
@@ -412,14 +418,18 @@ Commit: `fix(shell): T1-3 Windows PowerShell parity`
      return join(homedir(), '.dsh', 'memory', hash)
    }
 
-   /** Read every memory file for one workspace; missing directory yields []. */
-   export async function readMemories(workspacePath: string): Promise<string[]> {
+   /**
+    * Read every memory file for one workspace; a missing directory yields [].
+    * Synchronous by design: the only caller is the synchronous system-prompt
+    * section callback, and an async read there would race the first assembly.
+    * The payload is a few small markdown files, read once per workspace.
+    */
+   export function readMemories(workspacePath: string): string[] {
      try {
        const dir = memoryDir(workspacePath)
-       const names = await readdir(dir)
-       return await Promise.all(
-         names.filter(n => n.endsWith('.md')).map(n => readFile(join(dir, n), 'utf8')),
-       )
+       return readdirSync(dir)
+         .filter(name => name.endsWith('.md'))
+         .map(name => readFileSync(join(dir, name), 'utf8'))
      } catch {
        return []
      }
@@ -446,9 +456,9 @@ Commit: `fix(shell): T1-3 Windows PowerShell parity`
    }
    ```
 
-3. `src/index.ts` — plugin entry. Note `inject = ['tools', 'systemPrompt']`,
-   the synchronous section callback reading a cache, and the `agent/created`
-   preload:
+3. `src/index.ts` — plugin entry. Note `inject = ['tools', 'systemPrompt']` and
+   that the cache is filled lazily *inside* the synchronous callback, so there
+   is no lifecycle listener and no race:
 
    ```ts
    import type { Context } from '@deepseek-ai/cordis'
@@ -460,41 +470,47 @@ Commit: `fix(shell): T1-3 Windows PowerShell parity`
    export const inject = ['tools', 'systemPrompt']
 
    export function apply(ctx: Context): void {
-     // Synchronous section callback cannot await, so memories are cached per
-     // workspace and refreshed on agent creation and after every write.
+     // Rendered memory text per workspace path. Filled on first assembly for a
+     // workspace and invalidated after a write, so a turn never reads stale
+     // text and never waits on I/O it cannot await.
      const cache = new Map<string, string>()
 
-     const load = async (cwd: string): Promise<void> => {
-       const memories = await readMemories(cwd)
-       cache.set(cwd, memories.length === 0 ? '' : `## Persistent memory\n\n${memories.join('\n\n---\n\n')}`)
+     const render = (cwd: string): string => {
+       const cached = cache.get(cwd)
+       if (cached !== undefined) return cached
+       const memories = readMemories(cwd)
+       const text = memories.length === 0
+         ? ''
+         : `## Persistent memory\n\n${memories.join('\n\n---\n\n')}`
+       cache.set(cwd, text)
+       return text
      }
-
-     ctx.on('agent/created', (agent) => {
-       const cwd = agent.session.header.cwd ?? process.cwd()
-       void load(cwd)
-     })
 
      ctx.effect(() => ctx.systemPrompt.section({
        name: 'memory:workspace',
        order: 10,
        text: (context) => {
+         // Absent agent means a diagnostics assembly with no session to scope to.
          if (context.agent === undefined) return ''
-         return cache.get(context.agent.session.header.cwd ?? process.cwd()) ?? ''
+         return render(context.agent.session.header.cwd ?? process.cwd())
        },
      }), 'memory.section()')
 
-     registerMemoryTools(ctx, load)
+     // Tools invalidate the cache entry for the workspace they wrote to.
+     registerMemoryTools(ctx, (cwd: string) => cache.delete(cwd))
    }
    ```
 
-   Verify the exact `agent/created` payload shape in
-   `packages/core/agent/src/runtime-types.ts` before writing the listener — do
-   not assume the parameter is a bare `Agent`.
+   Do not reintroduce a lifecycle-event preload. `agent/created` is
+   `payload: { agent: Agent }` (not a bare `Agent`) and is documented
+   composition-only; neither it nor `agent/session-start` awaits a returned
+   promise, so an async preload from either one races the first assembly.
 
 4. `src/tools.ts` — `save_memory` and `forget_memory` via `defineTool`. Each
    resolves the workspace from `exec` (see `packages/fs/tool-fs/src/session-cwd.ts`
-   for the established `sessionCwd(exec, path)` helper) and calls `load()` after
-   a write so the cache reflects the change on the next assembly.
+   for the established `sessionCwd(exec, path)` helper) and calls the
+   `invalidate(cwd)` callback after a write or delete, so the next assembly
+   re-reads that workspace's files.
 
 5. Mount in `apps/cli/config/agent-presets/standard/agent.cordis.yml`:
 

@@ -145,6 +145,7 @@ export type ToolResultView =
   | ReadResultView
   | WebResultView
   | HtmlPreviewResultView
+  | AppPreviewResultView
 
 /**
  * The default completed card: an optional replacement title and reformatted
@@ -342,6 +343,36 @@ export interface HtmlPreviewResultView {
   /**
    * Sandbox directives for the iframe. Defaults to `'allow-scripts'` when
    * absent. Pass `'none'` for maximum isolation (no scripts, no same-origin).
+   */
+  sandbox?: string | undefined
+}
+/**
+ * A completed live-app preview rendered in a sandboxed iframe by a capable UI.
+ * Set by an app-preview tool whose call surfaces a running localhost URL (e.g.
+ * `render_app_url`). The pending state stays a {@link GenericCallView} because
+ * the URL is not available until `execute` returns. A UI without the app-preview
+ * capability falls back to `content` (the model-facing text), so this view
+ * degrades gracefully.
+ *
+ * The URL is loaded via `src` into a sandboxed `<iframe>` — the content comes
+ * from a running dev server, not a static snapshot. `allow-same-origin` defaults
+ * on so the running app can reference its own scripts and styles; the `sandbox`
+ * field lets the tool narrow it.
+ */
+export interface AppPreviewResultView {
+  card: 'app-preview'
+  /** Replacement title for the completed call. Omit to keep the pending-state title. */
+  title?: string
+  /** The localhost URL to load as the iframe src. */
+  url: string
+  /**
+   * Preferred width hint in pixels for the iframe viewport. Absent uses the
+   * container's natural width.
+   */
+  width?: number | undefined
+  /**
+   * Sandbox directives for the iframe. Defaults to `'allow-scripts allow-same-origin'`
+   * when absent.
    */
   sandbox?: string | undefined
 }

@@ -40,6 +40,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 | `@deepseek-ai/dsh-tool-html-preview` | `render_html` | `ctx.tools` | `tool/call`, `tool/result` | - | render_html is a demo pass-through: the model supplies complete HTML and the tool carries it into the html-preview GUI card (sandboxed iframe); the tool itself performs no I/O. |
+| `@deepseek-ai/dsh-tool-app-preview` | `render_app_url` | `ctx.tools` | `tool/call`, `tool/result` | - | render_app_url is a demo pass-through: the model starts a dev server and supplies its localhost URL; the tool carries it into the app-preview GUI card (sandboxed iframe src). The tool itself performs no I/O. |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -1911,3 +1912,42 @@ Render an HTML preview card. The `<html>` argument is the complete source the GU
 Source: [`packages/examples/tool-html-preview/src/index.ts`](../packages/examples/tool-html-preview/src/index.ts)
 
 render_html is a demo pass-through: the model supplies complete HTML and the tool carries it into the html-preview GUI card (sandboxed iframe); the tool itself performs no I/O.
+
+<a id="deepseek-aidsh-tool-app-preview"></a>
+
+## `@deepseek-ai/dsh-tool-app-preview`
+
+### `render_app_url`
+
+Render a running app preview card from a localhost URL. Start the dev server first (via bash), then pass the `http://localhost:<port>` URL here to surface a sandboxed iframe preview in the GUI. `width` hints the viewport width and `sandbox` narrows the iframe directives (absent means `allow-scripts allow-same-origin`). Only accepts localhost URLs.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The localhost URL to render in the sandboxed preview iframe. Must be http://localhost:<port> or http://127.0.0.1:<port>."
+    },
+    "title": {
+      "type": "string",
+      "description": "Optional replacement title for the rendered preview card."
+    },
+    "width": {
+      "type": "integer",
+      "description": "Preferred viewport width in pixels for the preview iframe."
+    },
+    "sandbox": {
+      "type": "string",
+      "description": "Sandbox directives for the preview iframe; absent defaults to `allow-scripts allow-same-origin`."
+    }
+  },
+  "required": [
+    "url"
+  ]
+}
+```
+
+Source: [`packages/examples/tool-app-preview/src/index.ts`](../packages/examples/tool-app-preview/src/index.ts)
+
+render_app_url is a demo pass-through: the model starts a dev server and supplies its localhost URL; the tool carries it into the app-preview GUI card (sandboxed iframe src). The tool itself performs no I/O.

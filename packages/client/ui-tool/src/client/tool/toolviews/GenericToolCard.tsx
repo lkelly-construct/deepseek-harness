@@ -15,6 +15,7 @@ import { searchCardModel } from '../models/search-card-model.ts'
 import { terminalCardModel, terminalFailed } from '../models/terminal-card-model.ts'
 import { webCardModel } from '../models/web-card-model.ts'
 import { htmlPreviewCardModel } from '../models/html-preview-card-model.ts'
+import { appPreviewCardModel } from '../models/app-preview-card-model.ts'
 import { toolRowModel, type ToolRowVariant } from '../models/tool-call-model.ts'
 import { ToolRow } from '../components/ToolRow.tsx'
 
@@ -42,6 +43,7 @@ export function GenericToolCard({ toolName, block, cwd, openFile, inspect, t }: 
   const search = searchCardModel(block)
   const web = webCardModel(block)
   const htmlPreview = htmlPreviewCardModel(block)
+  const appPreview = appPreviewCardModel(block)
   // A failing exit status is the terminal card's own error signal (the call
   // itself settles isError:false), surfaced as the row's red state dot.
   const state = model.state === 'ok' && terminal !== null && terminalFailed(terminal)
@@ -71,6 +73,7 @@ export function GenericToolCard({ toolName, block, cwd, openFile, inspect, t }: 
       search={search}
       web={web}
       htmlPreview={htmlPreview}
+      appPreview={appPreview}
       state={state}
       filePath={model.filePath}
       onOpenFile={singleFile ? openFile : undefined}

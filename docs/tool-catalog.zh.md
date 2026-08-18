@@ -42,6 +42,7 @@
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
 | `@deepseek-ai/dsh-tool-html-preview` | `render_html` | `ctx.tools` | `tool/call`、`tool/result` | - | render_html 是一个演示直通工具：模型提供完整 HTML，工具将其带入 html-preview GUI 卡片（沙箱 iframe）；工具本身不执行任何 I/O。 |
+| `@deepseek-ai/dsh-tool-app-preview` | `render_app_url` | `ctx.tools` | `tool/call`、`tool/result` | - | render_app_url 是一个演示直通工具：模型启动开发服务器并提供其 localhost URL；工具将其带入 app-preview GUI 卡片（沙箱 iframe src）。工具本身不执行任何 I/O。 |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -1916,3 +1917,42 @@ web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可�
 来源：[`packages/examples/tool-html-preview/src/index.ts`](../packages/examples/tool-html-preview/src/index.ts)
 
 render_html 是一个演示直通工具：模型提供完整 HTML，工具将其带入 html-preview GUI 卡片（沙箱 iframe）；工具本身不执行任何 I/O。
+
+<a id="deepseek-aidsh-tool-app-preview"></a>
+
+## `@deepseek-ai/dsh-tool-app-preview`
+
+### `render_app_url`
+
+从 localhost URL 渲染运行中的应用预览卡片。先通过 bash 启动开发服务器，再把 `http://localhost:<port>` URL 传到这里，在 GUI 中呈现沙箱 iframe 预览。`width` 提示视口宽度，`sandbox` 收窄 iframe 指令（缺省为 `allow-scripts allow-same-origin`）。仅接受 localhost URL。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The localhost URL to render in the sandboxed preview iframe. Must be http://localhost:<port> or http://127.0.0.1:<port>."
+    },
+    "title": {
+      "type": "string",
+      "description": "Optional replacement title for the rendered preview card."
+    },
+    "width": {
+      "type": "integer",
+      "description": "Preferred viewport width in pixels for the preview iframe."
+    },
+    "sandbox": {
+      "type": "string",
+      "description": "Sandbox directives for the preview iframe; absent defaults to `allow-scripts allow-same-origin`."
+    }
+  },
+  "required": [
+    "url"
+  ]
+}
+```
+
+来源：[`packages/examples/tool-app-preview/src/index.ts`](../packages/examples/tool-app-preview/src/index.ts)
+
+render_app_url 是一个演示直通工具：模型启动开发服务器并提供其 localhost URL；工具将其带入 app-preview GUI 卡片（沙箱 iframe src）。工具本身不执行任何 I/O。

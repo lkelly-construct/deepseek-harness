@@ -38,3 +38,8 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+.git-staged-files.txt
+**/src/*.js
+**/src/*.js.map
+**/src/*.d.ts
+**/src/*.d.ts.map

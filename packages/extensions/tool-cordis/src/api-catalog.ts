@@ -2656,6 +2656,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AgentStatus = \'idle\' | \'running\';',
   },
   {
+    name: 'AppPreviewResultView',
+    declaration: 'export interface AppPreviewResultView {\n    card: \'app-preview\';\n    title?: string;\n    url: string;\n    width?: number | undefined;\n    sandbox?: string | undefined;\n}',
+  },
+  {
     name: 'ApprovalOutcome',
     declaration: 'export type ApprovalOutcome = \'allowed-once\' | \'rejected\' | \'cancelled\' | \'unavailable\';',
   },
@@ -4445,7 +4449,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ToolResultView',
-    declaration: 'export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView | HtmlPreviewResultView;',
+    declaration: 'export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView | HtmlPreviewResultView | AppPreviewResultView;',
   },
   {
     name: 'ToolRunContext',

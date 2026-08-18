@@ -59,6 +59,7 @@ import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolHtmlPreview from '@deepseek-ai/dsh-tool-html-preview'
+import * as ToolAppPreview from '@deepseek-ai/dsh-tool-app-preview'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
@@ -563,6 +564,18 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'render_html is a demo pass-through: the model supplies complete HTML and the tool carries it into the html-preview GUI card (sandboxed iframe); the tool itself performs no I/O.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-app-preview',
+    dir: 'tool-app-preview',
+    source: 'packages/examples/tool-app-preview/src/index.ts',
+    requires: ['ctx.tools'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(ToolAppPreview)
+    },
+    note:
+      'render_app_url is a demo pass-through: the model starts a dev server and supplies its localhost URL; the tool carries it into the app-preview GUI card (sandboxed iframe src). The tool itself performs no I/O.',
   },
 ]
 

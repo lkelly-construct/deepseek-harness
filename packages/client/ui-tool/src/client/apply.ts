@@ -12,6 +12,7 @@ import { searchToolview } from './tool/toolviews/search-row.tsx'
 import { todoToolview } from './tool/toolviews/todo-row.tsx'
 import { webToolview } from './tool/toolviews/web-row.tsx'
 import { htmlPreviewToolview } from './tool/toolviews/html-preview-row.tsx'
+import { appPreviewToolview } from './tool/toolviews/app-preview-row.tsx'
 
 /** Required service: the slot registry that owns both Tool render seats. */
 export const inject = ['slots']
@@ -41,6 +42,7 @@ export function apply(ctx: ClientContext): void {
   ctx.plugin(searchToolview)
   ctx.plugin(webToolview)
   ctx.plugin(htmlPreviewToolview)
+  ctx.plugin(appPreviewToolview)
   ctx.plugin(todoToolview)
   ctx.plugin(askQuestionToolview)
 }

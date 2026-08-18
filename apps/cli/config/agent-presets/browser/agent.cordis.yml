@@ -1,0 +1,15 @@
+# Browser agent preset — standard tools + Playwright MCP.
+
+- id: tool-app-preview
+  name: '@deepseek-ai/dsh-tool-app-preview'
+
+- id: playwright-mcp
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    transport: stdio
+    serverName: playwright
+    command: npx
+    args:
+      - -y
+      - '@playwright/mcp@latest'
+    failOnStartupError: false

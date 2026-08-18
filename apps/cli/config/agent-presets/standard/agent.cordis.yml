@@ -26,6 +26,9 @@
   config:
     text: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+      Be concise. Skip preamble, restating the task, and summarizing what you just did unless
+      asked. Prefer short direct answers over exhaustive explanations; expand only when the
+      task is genuinely complex or the user asks for detail.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'

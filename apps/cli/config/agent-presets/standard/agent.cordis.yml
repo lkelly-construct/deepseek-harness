@@ -260,3 +260,11 @@
   config:
     fetch: false
     searchTimeoutMs: 60000
+
+# ── persistent memory ───────────────────────────────────────────────────────
+
+# `memory-local` contributes a `## Persistent memory` section to the agent's
+# system prompt (from the host `systemPrompt` registry) plus `save_memory` /
+# `forget_memory` in the host `tools` registry, so it needs no realm.
+- id: memory-local
+  name: '@deepseek-ai/dsh-memory-local'

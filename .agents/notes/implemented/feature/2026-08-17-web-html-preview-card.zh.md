@@ -26,6 +26,8 @@ Status: implemented
 
 客户端表面对其余所有工具保持默认通用。结果文本仍是模型可见内容的权威；新卡片与 `web` 一样是展示层叠加。
 
+随附的现实化演示是 `@deepseek-ai/dsh-tool-html-preview` 示例包：一个仅宿主的 `render_html` 工具，通过其 `presentResult` 把模型提供的 HTML 带入卡片，挂载进 web profile 作用域（也进部署的用户 preset 根目录以供浏览器演示）。keyless web e2e `apps/web/tests/html-preview.e2e.ts` 在用户 preset 下种子化一个已结束的 `render_html` 回合，并断言沙箱化的 `srcdoc` iframe；同一 preset 上的真实模型回合在实时 GUI 里复现该卡片。
+
 ## 相关
 
 - [tool-render-intent-union](../architecture/2026-07-02-tool-render-intent-union.md)

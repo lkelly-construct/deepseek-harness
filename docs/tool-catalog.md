@@ -39,6 +39,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
+| `@deepseek-ai/dsh-tool-html-preview` | `render_html` | `ctx.tools` | `tool/call`, `tool/result` | - | render_html is a demo pass-through: the model supplies complete HTML and the tool carries it into the html-preview GUI card (sandboxed iframe); the tool itself performs no I/O. |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -1871,3 +1872,42 @@ Search the web for current information. Returns an optional summary answer and a
 Source: [`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps.
+
+<a id="deepseek-aidsh-tool-html-preview"></a>
+
+## `@deepseek-ai/dsh-tool-html-preview`
+
+### `render_html`
+
+Render an HTML preview card. The `<html>` argument is the complete source the GUI renders client-side in a sandboxed iframe; `width` hints the viewport width and `sandbox` narrows the iframe directives (absent means `allow-scripts`). The rendered preview is not a model-visible result; the tool is a pass-through that merely carries the HTML to the card.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "html": {
+      "type": "string",
+      "description": "The complete HTML source to render in the sandboxed preview iframe."
+    },
+    "title": {
+      "type": "string",
+      "description": "Optional replacement title for the rendered preview card."
+    },
+    "width": {
+      "type": "integer",
+      "description": "Preferred viewport width in pixels for the preview iframe."
+    },
+    "sandbox": {
+      "type": "string",
+      "description": "Sandbox directives for the preview iframe; absent defaults to `allow-scripts`."
+    }
+  },
+  "required": [
+    "html"
+  ]
+}
+```
+
+Source: [`packages/examples/tool-html-preview/src/index.ts`](../packages/examples/tool-html-preview/src/index.ts)
+
+render_html is a demo pass-through: the model supplies complete HTML and the tool carries it into the html-preview GUI card (sandboxed iframe); the tool itself performs no I/O.

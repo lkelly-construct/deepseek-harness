@@ -270,37 +270,47 @@ export function ToolRow({
                   : webBody !== null
                     ? <WebBlock {...webBody} className={css.webBody} />
                     : htmlPreviewBody !== null
-                      ? <HtmlPreviewBlock {...htmlPreviewBody} labels={{ copyLabel: t('copy'), copiedLabel: t('copied') }} className={css.htmlPreviewBody} />
+                      ? <HtmlPreviewBlock
+                        {...htmlPreviewBody}
+                        labels={{ copyLabel: t('copy'), copiedLabel: t('copied') }}
+                        className={css.htmlPreviewBody}
+                      />
                       : (
-                      <>
-                        {variant === 'code' && body !== null && (
-                          <div className={css.bodyScroll}>
-                            <CodeBlock code={body} lang="typescript" copyLabel={t('copy')} copiedLabel={t('copied')} className={css.codeBody} />
-                          </div>
-                        )}
-                        {(cardBody !== null || outputText !== null) && (
-                          <div className={css.ioCard}>
-                            {cardBody !== null && (
-                              <div className={css.ioSection}>
-                                <span className={css.ioLabel}>IN</span>
-                                <span className={css.ioText}>{cardBody}</span>
-                              </div>
-                            )}
-                            {cardBody !== null && outputText !== null && (
-                              <span className={css.ioDivider} aria-hidden />
-                            )}
-                            {outputText !== null && (
-                              <div className={css.ioSection}>
-                                <span className={css.ioLabel}>OUT</span>
-                                <span className={css.ioText} data-error={state === 'error' || undefined}>
-                                  {outputText}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
+                        <>
+                          {variant === 'code' && body !== null && (
+                            <div className={css.bodyScroll}>
+                              <CodeBlock
+                                code={body}
+                                lang="typescript"
+                                copyLabel={t('copy')}
+                                copiedLabel={t('copied')}
+                                className={css.codeBody}
+                              />
+                            </div>
+                          )}
+                          {(cardBody !== null || outputText !== null) && (
+                            <div className={css.ioCard}>
+                              {cardBody !== null && (
+                                <div className={css.ioSection}>
+                                  <span className={css.ioLabel}>IN</span>
+                                  <span className={css.ioText}>{cardBody}</span>
+                                </div>
+                              )}
+                              {cardBody !== null && outputText !== null && (
+                                <span className={css.ioDivider} aria-hidden />
+                              )}
+                              {outputText !== null && (
+                                <div className={css.ioSection}>
+                                  <span className={css.ioLabel}>OUT</span>
+                                  <span className={css.ioText} data-error={state === 'error' || undefined}>
+                                    {outputText}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
           {inspect !== undefined && (
             <button
               type="button"

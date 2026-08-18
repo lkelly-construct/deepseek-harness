@@ -66,9 +66,11 @@ export function HtmlPreviewBlock({
   const resolvedSandbox = resolveSandbox(sandbox)
 
   const handleCopy = () => {
-    writeClipboard(html)
+    void writeClipboard(html)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => {
+      setCopied(false)
+    }, 2000)
   }
 
   // Resolve the copy control's label once so the visible text and the accessible

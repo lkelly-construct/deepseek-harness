@@ -26,6 +26,8 @@ Client wiring follows the [tool-card precedent](2026-07-30-web-read-card.md): a 
 
 The client surface stays generic-by-default for every other tool. The result text remains the source of truth for model-visible content; the new card is a presentation overlay like `web`.
 
+The shipped demo realization is the `@deepseek-ai/dsh-tool-html-preview` example package: a host-only `render_html` tool that carries model-supplied HTML into the card through its `presentResult`, mounted in the web profile scope (and in the deployment's user preset root for the browser demo). The keyless web e2e `apps/web/tests/html-preview.e2e.ts` seeds a settled `render_html` turn under a user preset and asserts the sandboxed `srcdoc` iframe; a real-model round on the same preset reproduces the card in the live GUI.
+
 ## Related
 
 - [tool-render-intent-union](../architecture/2026-07-02-tool-render-intent-union.md)

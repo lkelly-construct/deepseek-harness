@@ -137,7 +137,14 @@ export interface ReadFileLine {
  * `ToolDefinition.presentResult`; omitting the method keeps the pending
  * title and renders the raw result content.
  */
-export type ToolResultView = GenericResultView | TerminalResultView | DiffResultView | SearchResultView | ReadResultView | WebResultView | HtmlPreviewResultView
+export type ToolResultView =
+  | GenericResultView
+  | TerminalResultView
+  | DiffResultView
+  | SearchResultView
+  | ReadResultView
+  | WebResultView
+  | HtmlPreviewResultView
 
 /**
  * The default completed card: an optional replacement title and reformatted

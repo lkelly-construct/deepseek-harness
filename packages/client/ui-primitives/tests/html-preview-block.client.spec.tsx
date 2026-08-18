@@ -15,11 +15,13 @@ afterEach(cleanup)
 const sampleHtml = '<h1>Hi</h1><script>window.x = 1</script>'
 
 describe('HtmlPreviewBlock', () => {
+  let writeText: ReturnType<typeof vi.fn>
   beforeEach(() => {
     vi.useFakeTimers()
     // jsdom lacks the async Clipboard API; the component's writeClipboard call
     // must not reject on the click path.
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => {}) } })
+    writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
   })
 
   afterEach(() => {
@@ -59,7 +61,7 @@ describe('HtmlPreviewBlock', () => {
     fireEvent.click(button)
     expect(button.getAttribute('aria-label')).toBe('Copied')
     expect(button.textContent).toBe('Copied')
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(sampleHtml)
+    expect(writeText).toHaveBeenCalledWith(sampleHtml)
     // The copied state clears after the confirmation window.
     act(() => { vi.advanceTimersByTime(2000) })
     expect(button.textContent).toBe('Copy')

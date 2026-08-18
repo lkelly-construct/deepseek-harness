@@ -41,6 +41,7 @@
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
+| `@deepseek-ai/dsh-tool-html-preview` | `render_html` | `ctx.tools` | `tool/call`、`tool/result` | - | render_html 是一个演示直通工具：模型提供完整 HTML，工具将其带入 html-preview GUI 卡片（沙箱 iframe）；工具本身不执行任何 I/O。 |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -1876,3 +1877,42 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 来源：[`packages/web/tool-web/src/index.ts`](../packages/web/tool-web/src/index.ts)
 
 web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。
+
+<a id="deepseek-aidsh-tool-html-preview"></a>
+
+## `@deepseek-ai/dsh-tool-html-preview`
+
+### `render_html`
+
+渲染 HTML 预览卡片。`<html>` 参数是 GUI 在客户端沙箱 iframe 中渲染的完整源码；`width` 提示视口宽度，`sandbox` 收窄 iframe 指令（缺省为 `allow-scripts`）。渲染的预览不是模型可见结果；该工具是仅把 HTML 带到卡片的直通工具。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "html": {
+      "type": "string",
+      "description": "The complete HTML source to render in the sandboxed preview iframe."
+    },
+    "title": {
+      "type": "string",
+      "description": "Optional replacement title for the rendered preview card."
+    },
+    "width": {
+      "type": "integer",
+      "description": "Preferred viewport width in pixels for the preview iframe."
+    },
+    "sandbox": {
+      "type": "string",
+      "description": "Sandbox directives for the preview iframe; absent defaults to `allow-scripts`."
+    }
+  },
+  "required": [
+    "html"
+  ]
+}
+```
+
+来源：[`packages/examples/tool-html-preview/src/index.ts`](../packages/examples/tool-html-preview/src/index.ts)
+
+render_html 是一个演示直通工具：模型提供完整 HTML，工具将其带入 html-preview GUI 卡片（沙箱 iframe）；工具本身不执行任何 I/O。

@@ -10,7 +10,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { ToolResultView } from '@deepseek-ai/dsh-tools'
+import type { ToolDefinition, ToolResultView } from '@deepseek-ai/dsh-tools'
 
 export const name = 'tool-html-preview'
 export const inject = ['tools']
@@ -51,7 +51,7 @@ function toView(html: string, width: number | undefined, sandbox: string | undef
  * composing a registry or loader.
  * @returns the registry-ready tool definition.
  */
-export function defineRenderHtmlTool() {
+export function defineRenderHtmlTool(): ToolDefinition {
   return defineTool({
     name: 'render_html',
     description: 'Render an HTML preview card. The `<html>` argument is the complete '

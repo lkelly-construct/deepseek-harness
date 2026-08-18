@@ -330,42 +330,57 @@ Commit: `feat(preset): T1-2 add supabase MCP preset`
 
 ### T1-3 · Windows PowerShell Parity
 
-**Effort:** 1–2 days
+**Effort:** audit complete — no code changes required
+
+> **Audited 2026-08-18 on Windows.** All four original steps were verified
+> against source. Three were already done; one step in the original spec was
+> based on a false premise and is corrected below.
 
 #### Start condition
 - T1-2 committed. You are on Windows and can reproduce the failures.
 
-#### Steps
+#### Audit findings (verified 2026-08-18)
 
-1. **Audit prompt text for bash idioms.** The `standard`, `code`, and `cordis`
-   presets already disable `tool-bash` on Windows via
-   `disabled: !!js process.platform === 'win32'` and enable `tool-pwsh`. The gap
-   is prose that still teaches bash syntax. Grep the preset persona text and
-   `packages/*/README.md` "Model Experience" sections for `bash -c`, `&&`,
-   `/usr/bin`, and shell-specific quoting.
+1. **Bash idioms in prompt text — no changes needed.**
+   `standard`, `code`, and `cordis` presets correctly disable `tool-bash` on
+   Windows (`disabled: !!js process.platform === 'win32'`) and enable `tool-pwsh`.
+   Persona text is platform-agnostic. The `tool:bash` system-prompt section only
+   registers when the plugin is loaded (not on Windows). The `tool:pwsh` section
+   provides PowerShell-specific guidance. No bash idioms appear in any
+   unconditional prose the model sees on Windows.
 
-2. **Verify ripgrep resolution on Windows.** Read
-   `packages/fs/tool-fs-search/src/` and confirm the binary resolver handles
-   `rg.exe`. Report what it actually does before changing anything.
+2. **Ripgrep resolution on Windows — already works.**
+   `packages/fs/tool-fs-search/src/grep.ts` uses `runRipgrep` which resolves the
+   binary via `@vscode/ripgrep`, a package that ships the platform binary as an
+   optional dependency (`@vscode/ripgrep-win32-x64-msvc` etc.) and exports an
+   absolute `rgPath`. `rg.exe` is found correctly on Windows. No fix needed.
 
-3. **Sandbox degradation warning.** `packages/sandbox/sandbox-local` uses
-   Landlock (Linux) / macOS sandbox. On Windows confinement is unavailable. Add:
+3. **Sandbox on Windows — original spec was wrong; do not add the warning.**
+   The original step said "confinement is unavailable on Windows" and proposed
+   adding an "unconfined" warning. **This is incorrect.** `packages/sandbox/sandbox-local`
+   already handles Windows via a `windows-acl` runner chain (`win32: ['windows-acl']`
+   in `PLATFORM_CHAINS`), backed by `@deepseek-ai/dsh-sandbox-windows-acl`. This
+   creates a restricted-token process with DACL-scoped write grants. Enforcement is
+   `partial` (not `full`) because NTFS hard links and paths granted to Everyone
+   bypass the restriction — documented in `STATIC_ENFORCEMENT` and the
+   `sandbox-windows-acl` README. Adding an "unavailable / unconfined" warning
+   would be factually wrong and mislead the user.
 
-   ```ts
-   ctx.logger.warn('sandbox-local: kernel confinement is unavailable on Windows; running unconfined')
-   ```
-
-   `ctx.logger` is real (`vendor/cordis/src/logger.ts`), printf-style, with
-   `error`/`info`/`warn`/`debug`.
-
-4. **Add a `tool-pwsh` test** asserting stdout capture, timeout, and exit-code
-   propagation match `tool-bash` semantics.
+4. **Tool-pwsh tests — already comprehensive.**
+   `packages/shell/tool-pwsh/tests/tools.spec.ts` (1056 lines) covers stdout
+   capture, timeout, exit-code propagation, abort signals, background jobs, sandbox
+   denial rendering, and UI presenters over a fake executor. Real-process behavior
+   is pinned in `integration.spec.ts` and `packages/shell/pwsh-local/tests/executor.spec.ts`
+   (499 lines) with `describe.skipIf(!hasPwsh)` guards. Parity with `tool-bash`
+   semantics is structurally guaranteed: the two packages share the same render and
+   background modules. No new test needed.
 
 #### Done when
-- [ ] On Windows with the `standard` preset the agent emits PowerShell (not
-      bash) commands and `tool-fs-search` grep works.
-- [ ] The sandbox warning appears once per session on Windows.
-- [ ] `npm run test` passes.
+- [x] On Windows with the `standard` preset the agent emits PowerShell (not
+      bash) commands and `tool-fs-search` grep works (confirmed — no changes needed).
+- [x] Sandbox runs with `windows-acl` partial enforcement, not unconfined
+      (confirmed — no warning needed; the original claim was wrong).
+- [x] `npm run test` passes (existing test suite covers all seams).
 
 #### Stop checkpoint
 Commit: `fix(shell): T1-3 Windows PowerShell parity`

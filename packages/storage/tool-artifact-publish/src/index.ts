@@ -53,13 +53,16 @@ export function apply(ctx: Context): void {
           url: { type: 'string', required: true },
         },
       },
-      render: (_args, value) => [{ type: 'text', text: (value as { url: string }).url }],
+      render: (_args, value) => [{ type: 'text', text: value.url }],
     },
     async execute(args: { path: string }, exec) {
       const absolutePath = resolvePath(exec.agent?.session.header.cwd ?? process.cwd(), args.path)
       const fileBytes = await readFile(absolutePath)
 
-      const sessionId: string = (ctx as Context & { session?: { id?: string } }).session?.id ?? 'default'
+      // The session comes from the CALL, not the plugin context: `ctx` here is
+      // the plugin-scope context and carries no session, so reading it would
+      // put every artifact of every session under one `default/` prefix.
+      const sessionId: string = exec.agent?.session.id ?? 'default'
       const uuid = randomUUID()
       const ext = extname(absolutePath)
       const objectPath = `${sessionId}/${uuid}${ext}`

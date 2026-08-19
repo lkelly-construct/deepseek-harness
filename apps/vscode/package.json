@@ -5,6 +5,14 @@
   "version": "0.1.0",
   "publisher": "deepseek-ai",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/vscode"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -29,6 +37,7 @@
     "watch": "tsc -p tsconfig.json --watch"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "@types/vscode": "^1.80.0",
     "typescript": "^5.0.0"
   }

@@ -201,6 +201,9 @@ importers:
       '@deepseek-ai/dsh-mcp-client':
         specifier: workspace:^
         version: link:../../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-memory-local':
+        specifier: workspace:^
+        version: link:../../packages/memory/memory-local
       '@deepseek-ai/dsh-persona':
         specifier: workspace:^
         version: link:../../packages/preset/persona
@@ -246,6 +249,9 @@ importers:
       '@deepseek-ai/dsh-tool-app-preview':
         specifier: workspace:^
         version: link:../../packages/examples/tool-app-preview
+      '@deepseek-ai/dsh-tool-artifact-publish':
+        specifier: workspace:^
+        version: link:../../packages/storage/tool-artifact-publish
       '@deepseek-ai/dsh-tool-ask-user':
         specifier: workspace:^
         version: link:../../packages/interaction/tool-ask-user
@@ -273,6 +279,9 @@ importers:
       '@deepseek-ai/dsh-tool-jobs':
         specifier: workspace:^
         version: link:../../packages/jobs/tool-jobs
+      '@deepseek-ai/dsh-tool-notebook':
+        specifier: workspace:^
+        version: link:../../packages/fs/tool-notebook
       '@deepseek-ai/dsh-tool-pwsh':
         specifier: workspace:^
         version: link:../../packages/shell/tool-pwsh
@@ -361,6 +370,9 @@ importers:
 
   apps/vscode:
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.0
       '@types/vscode':
         specifier: ^1.80.0
         version: 1.125.0
@@ -1076,6 +1088,9 @@ importers:
       '@deepseek-ai/dsh-llm-retry':
         specifier: workspace:^
         version: link:../../llm/llm-retry
+      '@deepseek-ai/dsh-model-router':
+        specifier: workspace:^
+        version: link:../../routing/model-router
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:^
         version: link:../../interaction/permission-presets

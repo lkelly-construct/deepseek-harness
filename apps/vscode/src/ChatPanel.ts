@@ -69,7 +69,8 @@ export class ChatPanel {
   private async handleMessage(msg: BridgeMessage): Promise<void> {
     if (msg.type === 'dsh.openFile') {
       await openInEditor(msg.path, this.cwd, msg.line)
-    } else if (msg.type === 'dsh.showDiff') {
+    } else {
+      // The union's only other arm; narrowing makes an explicit test redundant.
       await showProposedDiff(msg.path, this.cwd, msg.before, msg.title)
     }
   }

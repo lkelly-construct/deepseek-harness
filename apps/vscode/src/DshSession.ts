@@ -58,7 +58,7 @@ export class DshSession {
   private waitForPort(): Promise<number> {
     return new Promise<number>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error(`DSH server did not become ready within ${STARTUP_TIMEOUT_MS}ms`)),
+        () => { reject(new Error(`DSH server did not become ready within ${STARTUP_TIMEOUT_MS}ms`)) },
         STARTUP_TIMEOUT_MS,
       )
 

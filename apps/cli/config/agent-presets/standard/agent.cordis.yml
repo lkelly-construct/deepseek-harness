@@ -84,6 +84,11 @@
   config:
     sampleOverCapGlobResults: false
 
+# `notebook_edit` reads and rewrites .ipynb cells through `ctx.fs`, so it obeys
+# the same sandbox boundary as the other filesystem tools and needs no realm.
+- id: tool-notebook
+  name: '@deepseek-ai/dsh-tool-notebook'
+
 # ── background jobs ────────────────────────────────────────────────────────
 
 # Only the model-facing controls. The task REGISTRY stays on the host plane:

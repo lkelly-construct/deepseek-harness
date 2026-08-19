@@ -43,3 +43,6 @@ worktrees/
 **/src/*.js.map
 **/src/*.d.ts
 **/src/*.d.ts.map
+
+# VS Code extension build output (apps/vscode/tsconfig.json outDir).
+apps/vscode/out/

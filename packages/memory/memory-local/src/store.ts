@@ -25,6 +25,28 @@ export function memoryDir(workspacePath: string): string {
 }
 
 /**
+ * Filenames a memory slug may produce. Deliberately excludes `.`, `/`, and `\`,
+ * so a slug can never traverse out of its workspace directory.
+ */
+const SAFE_SLUG = /^[A-Za-z0-9_-]{1,64}$/
+
+/**
+ * Reject a slug that could escape the workspace memory directory. The slug is
+ * model-supplied and is interpolated into a path, so an unchecked `../` would
+ * let `save_memory` write anywhere the process can reach and `forget_memory`
+ * unlink any `.md` file on disk.
+ * @param slug - the caller-supplied memory name.
+ * @throws When the slug is not a bare alphanumeric/underscore/hyphen name.
+ */
+export function assertSafeSlug(slug: string): void {
+  if (!SAFE_SLUG.test(slug)) {
+    throw new Error(
+      `invalid memory name ${JSON.stringify(slug)}: use 1-64 characters from A-Z a-z 0-9 _ - only`,
+    )
+  }
+}
+
+/**
  * Read every memory file for one workspace; a missing directory yields [].
  * Synchronous by design: the only caller is the synchronous system-prompt
  * section callback, and an async read there would race the first assembly.
@@ -54,6 +76,7 @@ export function readMemories(workspacePath: string): string[] {
 export async function writeMemory(
   workspacePath: string, slug: string, type: string, content: string,
 ): Promise<void> {
+  assertSafeSlug(slug)
   const dir = memoryDir(workspacePath)
   await mkdir(dir, { recursive: true })
   const front = `---\nname: ${slug}\ntype: ${type}\n---\n\n`
@@ -67,6 +90,7 @@ export async function writeMemory(
  * @returns true when the file was removed, false when it did not exist.
  */
 export async function deleteMemory(workspacePath: string, slug: string): Promise<boolean> {
+  assertSafeSlug(slug)
   try {
     await unlink(join(memoryDir(workspacePath), `${slug}.md`))
     return true

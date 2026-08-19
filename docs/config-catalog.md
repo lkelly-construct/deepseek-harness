@@ -2499,6 +2499,22 @@ export interface Config {
 
 Source: [`packages/lsp/tool-lsp/src/index.ts:58`](../packages/lsp/tool-lsp/src/index.ts)
 
+<a id="deepseek-aidsh-tool-notebook"></a>
+
+## `@deepseek-ai/dsh-tool-notebook`
+
+Requires: `tools` · `fs`
+
+```ts config-catalog
+/** Configuration for the notebook-editing tool. */
+export interface Config {
+  /** Model-facing tool description. */
+  description?: string
+}
+```
+
+Source: [`packages/fs/tool-notebook/src/index.ts:345`](../packages/fs/tool-notebook/src/index.ts)
+
 <a id="deepseek-aidsh-tool-pwsh"></a>
 
 ## `@deepseek-ai/dsh-tool-pwsh`

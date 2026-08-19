@@ -48,6 +48,7 @@ import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
+import * as ToolNotebook from '@deepseek-ai/dsh-tool-notebook'
 import TerminalSessionService from '@deepseek-ai/dsh-terminal'
 import * as ToolPty from '@deepseek-ai/dsh-tool-terminal'
 import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
@@ -294,6 +295,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'Standalone view/create/unique literal replace/line insert tool over the filesystem seam; it composes with any shell or terminal API.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-notebook',
+    dir: 'tool-notebook',
+    source: 'packages/fs/tool-notebook/src/index.ts',
+    requires: ['ctx.tools', 'ctx.fs'],
+    writes: ['tool/call', 'fs/observed after read presence/absence or successful mutation', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(ToolNotebook)
+    },
+    note:
+      'Standalone cell-indexed read/insert/replace/delete tool for Jupyter (.ipynb) notebooks over the filesystem seam; not mounted by any shipped preset by default.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-fs',

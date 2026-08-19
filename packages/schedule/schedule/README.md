@@ -64,9 +64,7 @@ The three schemas remain prefix-stable while their definitions and scope stay un
 
 #### What the model sees
 
-For each admitted due one-shot with `deliveryMode: 'new-session'`, the package instead starts a fresh root session and queues the stored prompt there as a plain user message, unwrapped — the new session has no prior schedule context to present it against.
-
-For a `session-local` one-shot, the package queues this stable user-role framing with JSON-escaped dynamic values:
+For each admitted due one-shot with `deliveryMode: 'new-session'`, the package instead starts a fresh root session and queues the stored prompt there as a plain user message, unwrapped — the new session has no prior schedule context to present it against; for a `session-local` one-shot, the package queues this stable user-role framing with JSON-escaped dynamic values:
 
 ##### Reminder framing
 

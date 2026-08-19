@@ -1040,7 +1040,7 @@ create, edit, pause, and resume require direct-human root authority; complete an
 
 ### `schedule_create`
 
-Create one reminder in the current session. Supply a non-empty prompt and exactly one selector: a positive safe-integer after_seconds delay, at as a strict offset date-time or local date/time object, or safe-integer every_seconds of at least 300. Fixed-rate reminders stay creation-aligned, skip missed occurrences, and batch one latest occurrence per overdue rule. Delivery is session-local: the reminder runs on time only while this session is live and otherwise becomes overdue until the session is resumed.
+Create one reminder in the current session. Supply a non-empty prompt and exactly one selector: a positive safe-integer after_seconds delay, at as a strict offset date-time or local date/time object, or safe-integer every_seconds of at least 300. Fixed-rate reminders stay creation-aligned, skip missed occurrences, and batch one latest occurrence per overdue rule. Delivery defaults to session-local: the reminder runs on time only while this session is live and otherwise becomes overdue until the session is resumed. delivery_mode: new-session instead starts a fresh root session (same cwd and preset as this one) and delivers the prompt there when due, independent of whether this session is live.
 
 ```json
 {
@@ -1085,6 +1085,14 @@ Create one reminder in the current session. Supply a non-empty prompt and exactl
         }
       ],
       "description": "Absolute target as strict offset RFC 3339 or local date/time with an explicit IANA zone."
+    },
+    "delivery_mode": {
+      "type": "string",
+      "description": "Defaults to session-local (this session, must be live). new-session starts a fresh root session on this session's working directory and preset when the reminder becomes due, and delivers the prompt there instead.",
+      "enum": [
+        "session-local",
+        "new-session"
+      ]
     }
   },
   "required": [

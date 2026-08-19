@@ -1,6 +1,7 @@
 # Agent Note: Calibrated translation prompt v4 contract
 
 Status: implemented
+Archived: 2026-08-18
 
 ## Problem
 

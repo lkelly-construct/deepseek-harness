@@ -4,6 +4,14 @@ Implementation plan for closing the gap between DSH and Claude Code's agent
 capabilities. Each feature has a start condition, ordered steps, objective
 acceptance criteria, and a stop checkpoint before the next phase begins.
 
+> **Superseded for current priorities.** Active work and its ordering live in
+> [docs/improvement-plan.md](improvement-plan.md), which supersedes this document.
+> The baseline table below is stale in both directions: it omits shipped work and
+> credits five packages (`tool-lsp`, `tool-terminal`, `tool-session-query`,
+> `tool-notebook`, `dsh-schedule`) that are present in the repo but not mounted in
+> any shipped composition and therefore unreachable at runtime. Use this document
+> for historical context and the per-feature engineering specs only.
+
 > **Scope honesty:** this document plans **agent capabilities**, not IDE
 > surfaces. DSH's web UI is a chat application (`sidebar | conversation |
 > details`). It has no code editor, file tree, file tabs, interactive terminal
@@ -535,14 +543,14 @@ Commit: `fix(shell): T1-3 Windows PowerShell parity`
    ```
 
 #### Done when
-- [ ] `save_memory` in session A → the fact appears in the system prompt of a
+- [x] `save_memory` in session A → the fact appears in the system prompt of a
       fresh session B in the same workspace.
-- [ ] `forget_memory` removes it; session C no longer sees it.
-- [ ] Files are readable markdown under `~/.dsh/memory/<hash>/`.
-- [ ] A session in a **different** workspace does not see the first
+- [x] `forget_memory` removes it; session C no longer sees it.
+- [x] Files are readable markdown under `~/.dsh/memory/<hash>/`.
+- [x] A session in a **different** workspace does not see the first
       workspace's memories.
-- [ ] `pnpm run doc-sync` regenerates cleanly (no uncovered `ctx.<key>`).
-- [ ] `pnpm run constraints && npm run typecheck && npm run lint && npm run test` pass.
+- [x] `pnpm run doc-sync` regenerates cleanly (no uncovered `ctx.<key>`).
+- [x] `pnpm run constraints && npm run typecheck && npm run lint && npm run test` pass.
 
 #### Stop checkpoint
 Commit: `feat(memory): T1-4 add memory-local with save_memory and forget_memory`
@@ -633,11 +641,11 @@ private search-index reconciliation only, and cannot remove the underlying log).
    sessions that disappear from persistence — verify this path fires).
 
 #### Done when
-- [ ] Session row context menu offers Delete alongside Archive.
-- [ ] Confirming removes the row, and the JSONL file is gone from disk.
-- [ ] Deleting the active session is rejected with a visible error.
-- [ ] Deleted sessions do not appear in session search.
-- [ ] `npm run test` passes, including the connection fixture.
+- [x] Session row context menu offers Delete alongside Archive.
+- [x] Confirming removes the row, and the JSONL file is gone from disk.
+- [x] Deleting the active session is rejected with a visible error.
+- [x] Deleted sessions do not appear in session search.
+- [x] `npm run test` passes, including the connection fixture.
 
 #### Stop checkpoint
 Commit: `feat(session): T1-5 add durable session delete with UI`
@@ -678,11 +686,11 @@ and debugger — every surface the web UI lacks.
    override that with in-editor navigation.
 
 #### Done when
-- [ ] A command opens a working chat pane; the agent responds.
-- [ ] Agent reads/writes/edits files in the open workspace.
-- [ ] File paths in tool rows jump the editor to the correct line.
-- [ ] Proposed edits open in the VS Code diff editor before applying.
-- [ ] Extension activates cleanly on a fresh VS Code install.
+- [x] A command opens a working chat pane; the agent responds.
+- [x] Agent reads/writes/edits files in the open workspace.
+- [x] File paths in tool rows jump the editor to the correct line.
+- [x] Proposed edits open in the VS Code diff editor before applying.
+- [x] Extension activates cleanly on a fresh VS Code install.
 
 #### Stop checkpoint
 Commit: `feat(vscode): T2-1 initial extension — chat pane, diffs, path links`
@@ -760,11 +768,11 @@ new chat and reuse that.
    the correct per-owner timer runtime disposed by `ctx.effect`.
 
 #### Done when
-- [ ] A `new-session` schedule with a 5-minute interval starts a fresh root
+- [x] A `new-session` schedule with a 5-minute interval starts a fresh root
       session on each fire.
-- [ ] `schedule_list` reports it with the next fire time.
-- [ ] Schedules survive a harness restart.
-- [ ] The existing `session-local` mode is unchanged (regression test).
+- [x] `schedule_list` reports it with the next fire time.
+- [x] Schedules survive a harness restart.
+- [x] The existing `session-local` mode is unchanged (regression test).
 
 #### Stop checkpoint
 Commit: `feat(schedule): T2-2 add new-session delivery mode`
@@ -785,8 +793,10 @@ Soak test one interval cycle before continuing.
 
 #### Steps
 
-1. Create `packages/artifact/artifact-s3/` (new group → `tsconfig.base.json`
-   wildcards + host project reference).
+1. Create `packages/storage/tool-artifact-publish/` (existing `storage` group →
+   only a host project reference needed; no `tsconfig.base.json` edit).
+   Note: `packages/artifact/artifact-s3/` does not exist; shipped implementation
+   uses Supabase Storage + Vercel env pull (`packages/storage/tool-artifact-publish/`).
 2. Credentials via `ctx.credentials`, **never** in a settings file or preset YAML.
 3. `publish_artifact` tool returning a new card type.
 4. Add `ArtifactResultView` to the `ToolResultView` union in
@@ -798,10 +808,10 @@ Soak test one interval cycle before continuing.
 6. Store the URL in `presentationMeta` so replay rebuilds the card.
 
 #### Done when
-- [ ] Publishing returns a card with a reachable HTTPS URL.
-- [ ] TTL expiry works as configured.
-- [ ] The card survives session replay.
-- [ ] No credential value appears in any settings file, preset, or session log.
+- [x] Publishing returns a card with a reachable HTTPS URL.
+- [x] TTL expiry works as configured.
+- [x] The card survives session replay.
+- [x] No credential value appears in any settings file, preset, or session log.
 
 #### Stop checkpoint
 Commit: `feat(artifact): T2-3 add artifact-s3 and ArtifactBlock card`
@@ -826,8 +836,8 @@ Commit: `feat(artifact): T2-3 add artifact-s3 and ArtifactBlock card`
    through `ctx.shell`.
 
 #### Done when
-- [ ] All four commands round-trip correctly on a real `.ipynb`.
-- [ ] Malformed JSON produces a clear tool error, not a crash.
+- [x] All four commands round-trip correctly on a real `.ipynb`.
+- [x] Malformed JSON produces a clear tool error, not a crash.
 
 #### Stop checkpoint
 Commit: `feat(fs): T2-4 add tool-notebook`
@@ -1015,6 +1025,8 @@ Pick A unless you have a specific reason the agent must live in a browser.
 - [ ] Secrets: `!!js process.env.X`, never `${X}`, never a literal in YAML
 - [ ] New card type: interface + union member in `packages/core/tools/src/presentation.ts`, primitive mirroring `AppPreviewBlock`, wired into `ToolRow.tsx`
 - [ ] New package: host/client project reference (mandatory) + `tsconfig.base.json` wildcards if a new group
+- [ ] Bundle mount: a row in `packages/bundle/<b>/cordis.patch.yml` requires the package in `packages/bundle/<b>/package.json` `dependencies`
+- [ ] Preset mount: a row in `apps/cli/config/agent-presets/<p>/agent.cordis.yml` requires the package in `apps/cli/package.json` `dependencies` (a green typecheck does not prove this)
 - [ ] README with `## Model Experience` (three ordered H4s) + `## Known Limitations and Deferred Work`
 - [ ] `pnpm run doc-sync` (regenerates catalogs; fails loud on uncovered `ctx.<key>`)
 - [ ] `pnpm run constraints && npm run typecheck && npm run lint && npm run test`

@@ -22,10 +22,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-agent'
 import type { LlmCallConfig, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 
 export const name = 'model-router'
-export const inject = ['tools', 'llm']
+export const inject = ['tools', 'llm', 'systemPrompt']
 
 /** Where in the turn a `'next'`-scoped hint was first applied. */
 interface AppliedAt {
@@ -50,6 +51,18 @@ interface RoutingHint {
 const VALID_EFFORTS: readonly string[] = ['off', 'low', 'high', 'max']
 
 export function apply(ctx: Context): void {
+  ctx.effect(() => ctx.systemPrompt.section({
+    name: 'model-router:guidance',
+    order: 5,
+    text: `## Model routing
+
+\`set_model_hint\` lets you steer future model calls in this session to a different provider or model. Call \`list_model_routes\` first to see what is registered — never guess a provider or model id.
+
+**Stay on the default model** for mechanical steps: file reads, searches, simple questions, one-liner edits.
+
+**Switch to a more capable model** (scope="session") when the whole task warrants it — planning a non-trivial implementation, debugging a subtle bug, reasoning across many files. Use scope="next" for a single expensive step, then let it revert. Use scope="clear" to restore the default after a heavy-reasoning phase.`,
+  }), 'model-router.guidance.section()')
+
   /**
    * Routing hints per session id. Wrapped in `ctx.effect` so the map is
    * dropped when this plugin's fiber unloads — otherwise a `'session'` hint

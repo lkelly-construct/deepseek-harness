@@ -66,6 +66,7 @@ import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
+import * as ToolArtifactPublish from '@deepseek-ai/dsh-tool-artifact-publish'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -590,6 +591,30 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'render_app_url is a demo pass-through: the model starts a dev server and supplies its localhost URL; the tool carries it into the app-preview GUI card (sandboxed iframe src). The tool itself performs no I/O.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-artifact-publish',
+    dir: 'tool-artifact-publish',
+    source: 'packages/storage/tool-artifact-publish/src/index.ts',
+    requires: ['ctx.tools', 'Corax_AI_Supabase_URL and Corax_AI_Supabase_Service_Key env vars at load time'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // The plugin guards on these env vars and skips registration when absent.
+      // Set sentinel values for the catalog harvest so the schema is collected.
+      const prev = { url: process.env['Corax_AI_Supabase_URL'], key: process.env['Corax_AI_Supabase_Service_Key'] }
+      process.env['Corax_AI_Supabase_URL'] = 'https://example.supabase.co'
+      process.env['Corax_AI_Supabase_Service_Key'] = 'catalog-harvest-sentinel'
+      try {
+        await ctx.plugin(ToolArtifactPublish)
+      } finally {
+        if (prev.url === undefined) { delete process.env['Corax_AI_Supabase_URL'] }
+        else { process.env['Corax_AI_Supabase_URL'] = prev.url }
+        if (prev.key === undefined) { delete process.env['Corax_AI_Supabase_Service_Key'] }
+        else { process.env['Corax_AI_Supabase_Service_Key'] = prev.key }
+      }
+    },
+    note:
+      'publish_artifact skips registration silently when either Supabase env var is absent; the tool only appears in the model-facing schema in deployments that have both vars set.',
   },
 ]
 

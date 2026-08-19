@@ -42,6 +42,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 | `@deepseek-ai/dsh-tool-html-preview` | `render_html` | `ctx.tools` | `tool/call`, `tool/result` | - | render_html is a demo pass-through: the model supplies complete HTML and the tool carries it into the html-preview GUI card (sandboxed iframe); the tool itself performs no I/O. |
 | `@deepseek-ai/dsh-tool-app-preview` | `render_app_url` | `ctx.tools` | `tool/call`, `tool/result` | - | render_app_url is a demo pass-through: the model starts a dev server and supplies its localhost URL; the tool carries it into the app-preview GUI card (sandboxed iframe src). The tool itself performs no I/O. |
+| `@deepseek-ai/dsh-tool-artifact-publish` | `publish_artifact` | `ctx.tools`, `Corax_AI_Supabase_URL and Corax_AI_Supabase_Service_Key env vars at load time` | `tool/call`, `tool/result` | - | publish_artifact skips registration silently when either Supabase env var is absent; the tool only appears in the model-facing schema in deployments that have both vars set. |
 
 <a id="deepseek-aidsh-tool-ask-user"></a>
 
@@ -2019,3 +2020,30 @@ Render a running app preview card from a localhost URL. Start the dev server fir
 Source: [`packages/examples/tool-app-preview/src/index.ts`](../packages/examples/tool-app-preview/src/index.ts)
 
 render_app_url is a demo pass-through: the model starts a dev server and supplies its localhost URL; the tool carries it into the app-preview GUI card (sandboxed iframe src). The tool itself performs no I/O.
+
+<a id="deepseek-aidsh-tool-artifact-publish"></a>
+
+## `@deepseek-ai/dsh-tool-artifact-publish`
+
+### `publish_artifact`
+
+Upload a local file to shared artifact storage and return a 24-hour presigned download URL. Use this to share files (reports, images, data exports, etc.) with the user or external services. Pass an absolute path or a path relative to the current working directory.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute or cwd-relative path to the local file to publish."
+    }
+  },
+  "required": [
+    "path"
+  ]
+}
+```
+
+Source: [`packages/storage/tool-artifact-publish/src/index.ts`](../packages/storage/tool-artifact-publish/src/index.ts)
+
+publish_artifact skips registration silently when either Supabase env var is absent; the tool only appears in the model-facing schema in deployments that have both vars set.

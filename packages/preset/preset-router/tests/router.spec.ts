@@ -83,11 +83,15 @@ function session(id = 'sess'): Session {
 }
 
 /** Mount the router over a fake llm and roster double. */
-async function harness(answer: string, roster: readonly string[] = ['standard', 'minimal']) {
+async function harness(
+  answer: string,
+  roster: readonly string[] = ['standard', 'minimal'],
+  broken: readonly string[] = [],
+) {
   const llm = fakeLlm(answer)
   const ctx = new Context()
   ctx.provide('llm', { stream: (options: GenerateOptions) => llm.stream(options) } as never)
-  ctx.provide('agentPresets', rosterDouble(roster) as never)
+  ctx.provide('agentPresets', rosterDouble(roster, broken) as never)
   const fiber = await ctx.plugin(PresetRouter, CONFIG)
   return { ctx, llm, fiber }
 }
@@ -161,7 +165,7 @@ describe('PresetRouter.routeForPrompt', () => {
   })
 
   it('skips without a roster, a broken roster, or an image-only prompt', async () => {
-    const { ctx, llm } = await harness('minimal', ['broken'])
+    const { ctx, llm } = await harness('minimal', ['broken'], ['broken'])
     expect(await ctx.presetRouter.routeForPrompt({ session: session(), content: TEXT_PROMPT, route: ROUTE })).toBeUndefined()
     expect(llm.calls).toHaveLength(0)
 

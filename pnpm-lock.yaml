@@ -359,6 +359,15 @@ importers:
         specifier: ^10.0.0
         version: 10.0.0
 
+  apps/vscode:
+    devDependencies:
+      '@types/vscode':
+        specifier: ^1.80.0
+        version: 1.125.0
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
   apps/web:
     dependencies:
       '@deepseek-ai/dsh-client-web':
@@ -11468,6 +11477,9 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
+  '@types/vscode@1.125.0':
+    resolution: {integrity: sha512-0icm/ZQAaism87P0ekHqi4/Ju9du+Tm0RUW+y7vqRsxY2cY0FNRX1nAnaW7nT6npPt2tfHiheZ55Zm9UhqonFA==}
+
   '@types/web-bluetooth@0.0.21':
     resolution: {integrity: sha512-oIQLCGWtcFZy2JW77j9k8nHzAOpqMHLQejDA48XXMWH6tjCQHz5RCFz1bzsmROyL6PUm+LLnUiI4BCn221inxA==}
 
@@ -13972,6 +13984,11 @@ packages:
   typescript-language-server@5.3.0:
     resolution: {integrity: sha512-5puofxZHgFdAYtfNpmwCAvgtaYgg8wrUnH30m7Ze3QuguId5RNRadKASpOpyDxTyUdAF51FjhTdjntLw/EuWcQ==}
     engines: {node: '>=20'}
+    hasBin: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
     hasBin: true
 
   typescript@6.0.3:
@@ -16574,6 +16591,8 @@ snapshots:
   '@types/turndown@5.0.6': {}
 
   '@types/unist@3.0.3': {}
+
+  '@types/vscode@1.125.0': {}
 
   '@types/web-bluetooth@0.0.21': {}
 
@@ -19506,6 +19525,8 @@ snapshots:
     dependencies:
       vscode-jsonrpc: 5.0.1
       vscode-languageserver-protocol: 3.18.2
+
+  typescript@5.9.3: {}
 
   typescript@6.0.3: {}
 

@@ -1,0 +1,35 @@
+{
+  "name": "dsh-vscode",
+  "displayName": "DeepSeek Harness",
+  "description": "DeepSeek Harness chat pane inside VS Code",
+  "version": "0.1.0",
+  "publisher": "deepseek-ai",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onCommand:dsh.openChat"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "dsh.openChat",
+        "title": "DSH: Open Chat"
+      },
+      {
+        "command": "dsh.restartServer",
+        "title": "DSH: Restart Server"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

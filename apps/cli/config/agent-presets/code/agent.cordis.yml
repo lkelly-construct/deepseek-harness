@@ -70,6 +70,9 @@
 - id: tool-app-preview
   name: '@deepseek-ai/dsh-tool-app-preview'
 
+- id: tool-artifact-publish
+  name: '@deepseek-ai/dsh-tool-artifact-publish'
+
 # ── filesystem ──────────────────────────────────────────────────────────────
 
 # Both register into the host `tools` registry and provide nothing, so

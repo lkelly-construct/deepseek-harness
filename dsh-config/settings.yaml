@@ -34,3 +34,10 @@ web-search-deepseek:
 agent-default-model:
   provider: openrouter
   model: openrouter/auto
+
+# Artifact publisher — uploads agent-generated files to Supabase Storage and
+# returns a 24-hour presigned URL so the agent can share deliverables.
+# Requires Corax_AI_Supabase_URL and Corax_AI_Supabase_Service_Key env vars.
+# Add them to %USERPROFILE%\.dsh\.env (never commit key values here).
+# The plugin self-disables gracefully when the env vars are absent.
+tool-artifact-publish: {}

@@ -61,6 +61,26 @@
       - 'button "复制: 创造模式"':
         - img
         - text: 复制
+    - listitem:
+      - 'button "设为默认: browser"':
+        - text: browser 内置 暂无描述。
+        - code: browser
+      - 'button "查看: browser"':
+        - img
+        - text: 查看
+      - 'button "复制: browser"':
+        - img
+        - text: 复制
+    - listitem:
+      - 'button "设为默认: supabase"':
+        - text: supabase 内置 暂无描述。
+        - code: supabase
+      - 'button "查看: supabase"':
+        - img
+        - text: 查看
+      - 'button "复制: supabase"':
+        - img
+        - text: 复制
   - heading "自定义" [level=3]
   - list:
     - listitem:

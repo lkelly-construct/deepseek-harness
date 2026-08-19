@@ -16,6 +16,8 @@ This is the live-app counterpart of the static [HTML preview card](../develop/ba
 
 ## How the agent uses it
 
+The `standard` and `code` preset personas instruct the agent to call `render_app_url` automatically after starting a dev server, so no manual prompt is needed.
+
 1. The agent runs the dev server through a bash tool.
 2. The server prints `http://localhost:<port>`; the agent calls `render_app_url` with that URL.
 3. The GUI loads the URL in the sandboxed iframe. You see the running app.

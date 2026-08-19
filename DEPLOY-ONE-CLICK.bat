@@ -173,8 +173,7 @@ if not defined CODE_CMD (
 )
 
 echo   [..] Compiling extension...
-cd /d "%INSTALL_DIR%\apps\vscode"
-call npx tsc -p tsconfig.json
+call pnpm --filter dsh-vscode run build
 if errorlevel 1 (
     echo [ERROR] VS Code extension compile failed.
     echo        The web UI is still fully functional without it.
@@ -182,7 +181,7 @@ if errorlevel 1 (
 )
 
 echo   [..] Packaging extension...
-call npx @vscode/vsce package --no-dependencies -o dsh.vsix >nul 2>&1
+call pnpm --filter dsh-vscode run package:vsix
 if errorlevel 1 (
     echo [ERROR] VS Code extension packaging failed.
     echo        The web UI is still fully functional without it.
@@ -190,7 +189,7 @@ if errorlevel 1 (
 )
 
 echo   [..] Installing extension into VS Code...
-call "%CODE_CMD%" --install-extension dsh.vsix --force
+call "%CODE_CMD%" --install-extension "%INSTALL_DIR%\apps\vscode\dsh.vsix" --force
 if errorlevel 1 (
     echo [ERROR] VS Code extension install failed.
     echo        You can install it manually: apps\vscode\dsh.vsix

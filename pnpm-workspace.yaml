@@ -50,6 +50,10 @@ allowBuilds:
   node-addon-require-builtin: false
   # JSONL durability calls MoveFileExW with write-through publication on Windows.
   koffi: true
+  # VS Code extension packaging tool (@vscode/vsce) pulls these two native deps.
+  # vsce-sign handles VSIX code signing; keytar is the credential store helper.
+  '@vscode/vsce-sign': true
+  keytar: true
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true

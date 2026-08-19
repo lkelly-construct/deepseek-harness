@@ -34,11 +34,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json --watch"
+    "watch": "tsc -p tsconfig.json --watch",
+    "package:vsix": "vsce package --no-dependencies --allow-missing-repository -o dsh.vsix"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3",
     "typescript": "^5.0.0"
   }
 }

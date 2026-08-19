@@ -1,6 +1,6 @@
 {
-  "name": "@deepseek-ai/dsh-tool-artifact-publish",
-  "description": "publish_artifact tool — uploads agent files to Supabase Storage and returns a 24-hour presigned URL",
+  "name": "@deepseek-ai/dsh-model-router",
+  "description": "Dynamic per-session model routing — the model calls set_model_hint to steer future steps to a different provider/model",
   "version": "0.1.0-rc.7",
   "publishConfig": {
     "access": "public"
@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
-    "directory": "packages/storage/tool-artifact-publish"
+    "directory": "packages/routing/model-router"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -29,12 +29,16 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^"
   }
 }

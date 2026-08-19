@@ -819,6 +819,12 @@
       "project": [
         "src/**/*.ts"
       ]
+    },
+    "packages/git/tool-git": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
     }
   }
 }

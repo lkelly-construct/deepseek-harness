@@ -90,6 +90,9 @@
 - id: tool-notebook
   name: '@deepseek-ai/dsh-tool-notebook'
 
+- id: tool-git
+  name: '@deepseek-ai/dsh-tool-git'
+
 # ── background jobs ────────────────────────────────────────────────────────
 
 # Only the model-facing controls. The task REGISTRY stays on the host plane:

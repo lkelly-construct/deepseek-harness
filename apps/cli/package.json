@@ -64,6 +64,7 @@
     "@deepseek-ai/dsh-tool-cordis": "workspace:^",
     "@deepseek-ai/dsh-tool-fs": "workspace:^",
     "@deepseek-ai/dsh-tool-fs-search": "workspace:^",
+    "@deepseek-ai/dsh-tool-git": "workspace:^",
     "@deepseek-ai/dsh-tool-html-preview": "workspace:^",
     "@deepseek-ai/dsh-tool-notebook": "workspace:^",
     "@deepseek-ai/dsh-tool-app-preview": "workspace:^",

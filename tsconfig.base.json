@@ -276,7 +276,8 @@
         "./packages/memory/*/src",
         "./packages/routing/*/src",
         "./packages/host/*/src",
-        "./packages/client/*/src"
+        "./packages/client/*/src",
+        "./packages/git/*/src"
       ]
     }
   }

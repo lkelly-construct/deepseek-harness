@@ -16,6 +16,9 @@ import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import type { CommandId } from '@deepseek-ai/dsh-commands/brand'
 // Type-only: makes the optional sibling service available to `ctx.get()`.
 import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner'
+// Type-only: ctx.systemPrompt and ctx.sessionProjections module augmentations.
+import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import {
   resolveCompactSpec,
   resolveConfig,
@@ -127,6 +130,37 @@ export class BasicCompactionEngine extends CompactionEngine {
     super(ctx)
     this.config = resolveConfig(config)
     if (this.config.auto) this._registerAutomaticCompaction()
+    this._registerContextPressureContext()
+  }
+
+  /**
+   * Surface the current context-window occupancy as a dynamic model context
+   * block so the model can pace itself before auto-compaction fires at 0.8.
+   * Uses `systemPrompt.context()` (not `section()`) so the cache prefix is
+   * never invalidated by a churning value.
+   */
+  private _registerContextPressureContext(): void {
+    this.ctx.inject(['systemPrompt', 'sessionProjections'], (scope) => {
+      scope.systemPrompt.context({
+        name: 'compaction:context-pressure',
+        order: 200,
+        text: (assembleContext) => {
+          const session = assembleContext.agent?.session
+          if (session === undefined) return ''
+          const pressure = scope.sessionProjections.snapshot(session).values.contextPressure
+          if (pressure === undefined) return ''
+          const { projectedTokens, contextWindow } = pressure
+          if (projectedTokens === undefined || contextWindow === undefined || contextWindow === 0) return ''
+          const ratio = projectedTokens / contextWindow
+          if (ratio <= 0.5) return ''
+          const pct = Math.round(ratio * 100)
+          if (ratio > 0.8) {
+            return `Context window: ${pct}% used (CRITICAL — compact or summarize immediately before auto-compaction triggers).`
+          }
+          return `Context window: ${pct}% used. Compact or summarize before approaching the limit.`
+        },
+      })
+    })
   }
 
   /**

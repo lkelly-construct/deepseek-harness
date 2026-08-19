@@ -3975,10 +3975,6 @@ importers:
         version: link:../../runtime-diagnostics/invariants
 
   packages/examples/tool-app-preview:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -3997,10 +3993,6 @@ importers:
         version: link:../../core/tools
 
   packages/examples/tool-html-preview:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -4455,12 +4447,6 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../fs-local
-      '@deepseek-ai/dsh-fs-observation-policy':
-        specifier: workspace:^
-        version: link:../fs-observation-policy
-      '@deepseek-ai/dsh-fs-sandbox':
-        specifier: workspace:^
-        version: link:../fs-sandbox
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants

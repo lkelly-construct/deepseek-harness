@@ -5,6 +5,7 @@
   ],
   "ignoreBinaries": [
     "bwrap",
+    "dsh",
     "icacls",
     "musl-gcc",
     "python3",
@@ -766,6 +767,24 @@
       "project": [
         "src/**/*.ts",
         "tests/**/*.ts"
+      ]
+    },
+    "packages/routing/model-router": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/storage/tool-artifact-publish": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/memory/memory-local": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
       ]
     },
     "packages/bundle/base": {

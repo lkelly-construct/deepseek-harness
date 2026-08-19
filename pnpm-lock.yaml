@@ -7094,6 +7094,15 @@ importers:
         specifier: workspace:^
         version: link:../storage
 
+  packages/storage/tool-artifact-publish:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
   packages/subagent/subagent:
     dependencies:
       zod:

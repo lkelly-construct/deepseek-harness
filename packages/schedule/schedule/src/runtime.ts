@@ -4,8 +4,11 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { randomUUID } from 'node:crypto'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { resolveSessionPreset } from '@deepseek-ai/dsh-agent-presets'
 import type { EveryScheduleRecord, OneShotScheduleRecord } from './types.ts'
 import {
   foldScheduleEvents,
@@ -227,6 +230,53 @@ export class ScheduleRuntime {
     }
   }
 
+  /** Queue one session-local reminder framing on this exact agent. Framing/enqueue failure writes no dispatch. */
+  private followUpSessionLocal(text: string): boolean {
+    try {
+      this.agent.followup(createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'plugin', plugin: 'schedule' },
+      }))
+      return true
+    } catch (error: unknown) {
+      if (this.isLive()) {
+        this.ctx.logger.warn(`schedule: framing or followup failed for agent "${this.agent.id}": ${renderThrown(error)}`)
+      }
+      return false
+    }
+  }
+
+  /**
+   * Start a fresh root session on this scheduling session's cwd and preset,
+   * and queue the stored prompt there directly (not the reminder framing —
+   * the new session has no prior schedule context to present it against).
+   * Creation or enqueue failure writes no dispatch, same posture as a failed
+   * session-local followup.
+   */
+  private async deliverNewSession(prompt: string): Promise<boolean> {
+    try {
+      const cwd = this.agent.session.header.cwd
+      const agentPreset = resolveSessionPreset(this.agent.session)
+      const { agent: created } = await this.ctx.agents.create({
+        sessionId: SessionId(`session-${randomUUID()}`),
+        meta: {
+          ...cwd === undefined ? {} : { cwd },
+          ...agentPreset === undefined ? {} : { agentPreset },
+        },
+      })
+      created.followup(createUserMessage({
+        content: [{ type: 'text', text: prompt }],
+        source: { kind: 'plugin', plugin: 'schedule' },
+      }))
+      return true
+    } catch (error: unknown) {
+      if (this.isLive()) {
+        this.ctx.logger.warn(`schedule: new-session delivery failed for agent "${this.agent.id}": ${renderThrown(error)}`)
+      }
+      return false
+    }
+  }
+
   /** Preflight, fold, arm, or dispatch the next one-shot or fixed-rate batch. */
   private async driveOnce(): Promise<void> {
     this.clearTimer()
@@ -253,56 +303,66 @@ export class ScheduleRuntime {
 
     let maintenance: Promise<boolean>
     try {
-      maintenance = this.agent.runMaintenance(() => {
-        if (!this.isRunnable()) return Promise.resolve(false)
+      maintenance = this.agent.runMaintenance(async () => {
+        if (!this.isRunnable()) return false
         const claimed = this.readFolded()
-        if (claimed === undefined) return Promise.resolve(false)
+        if (claimed === undefined) return false
         const decisionNow = Date.now()
         const decision = this.decide(claimed, decisionNow)
-        if (decision === undefined) return Promise.resolve(false)
+        if (decision === undefined) return false
         if (decision.kind === 'wait') {
           if (decision.target !== undefined) this.arm(decision.target, decisionNow)
-          return Promise.resolve(false)
+          return false
         }
-        try {
-          const text = decision.kind === 'one-shot'
-            ? renderReminderFraming(decision.record)
-            : renderEveryReminderBatchFraming(decision.reminders)
-          const message = createUserMessage({
-            content: [{ type: 'text', text }],
-            source: { kind: 'plugin', plugin: 'schedule' },
-          })
-          this.agent.followup(message)
-        } catch (error: unknown) {
-          if (this.isLive()) {
-            this.ctx.logger.warn(`schedule: framing or followup failed for agent "${this.agent.id}": ${renderThrown(error)}`)
+
+        if (decision.kind === 'one-shot') {
+          if (decision.record.deliveryMode === 'new-session') {
+            if (!await this.deliverNewSession(decision.record.prompt)) return false
+          } else if (!this.followUpSessionLocal(renderReminderFraming(decision.record))) {
+            return false
           }
-          return Promise.resolve(false)
-        }
-        try {
-          if (decision.kind === 'one-shot') {
+          try {
             this.agent.session.append('schedule/change', {
               version: 1,
               operation: 'dispatch',
               id: decision.record.id,
             })
-          } else {
-            for (const reminder of decision.reminders) {
-              this.agent.session.append('schedule/change', {
-                version: 1,
-                operation: 'dispatch',
-                id: reminder.record.id,
-                acceptedAt: decision.acceptedAt,
-              })
-            }
+          } catch (error: unknown) {
+            this.faulted = true
+            this.clearTimer()
+            this.ctx.logger.warn(`schedule: dispatch append failed for agent "${this.agent.id}": ${renderThrown(error)}`)
+            return false
+          }
+          return true
+        }
+
+        // decision.kind === 'every': new-session reminders deliver individually,
+        // the remaining session-local reminders still batch into one followup.
+        const newSessionDue = decision.reminders.filter(reminder => reminder.record.deliveryMode === 'new-session')
+        const sessionLocalDue = decision.reminders.filter(reminder => reminder.record.deliveryMode !== 'new-session')
+        for (const reminder of newSessionDue) {
+          if (!await this.deliverNewSession(reminder.record.prompt)) return false
+        }
+        if (sessionLocalDue.length > 0
+          && !this.followUpSessionLocal(renderEveryReminderBatchFraming(sessionLocalDue))) {
+          return false
+        }
+        try {
+          for (const reminder of decision.reminders) {
+            this.agent.session.append('schedule/change', {
+              version: 1,
+              operation: 'dispatch',
+              id: reminder.record.id,
+              acceptedAt: decision.acceptedAt,
+            })
           }
         } catch (error: unknown) {
           this.faulted = true
           this.clearTimer()
           this.ctx.logger.warn(`schedule: dispatch append failed for agent "${this.agent.id}": ${renderThrown(error)}`)
-          return Promise.resolve(false)
+          return false
         }
-        return Promise.resolve(true)
+        return true
       })
     } catch (_busy: unknown) {
       // `runMaintenance` rejects synchronously only while another agent activity owns the idle phase.

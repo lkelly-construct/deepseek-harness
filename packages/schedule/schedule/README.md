@@ -24,7 +24,9 @@ Schedule owns deterministic calendar normalization. Local times inside a dayligh
 
 ## Management tools
 
-The generated [tool catalog](../../../docs/tool-catalog.md) owns the argument and output schemas for `schedule_create`, `schedule_list`, and `schedule_delete`. Their canonical values use camelCase record fields even though model input uses `after_seconds` and `time_zone`.
+The generated [tool catalog](../../../docs/tool-catalog.md) owns the argument and output schemas for `schedule_create`, `schedule_list`, and `schedule_delete`. Their canonical values use camelCase record fields even though model input uses `after_seconds`, `time_zone`, and `delivery_mode`.
+
+`schedule_create` accepts an optional `delivery_mode`: `'session-local'` (the default — the reminder follows up in this same session, and only while it is live) or `'new-session'` (starts a fresh root session on this session's cwd and preset when the reminder becomes due, and delivers the stored prompt there directly, independent of whether this session is still live). Every record's `deliveryMode` view field reflects the mode it was created with.
 
 One Agent-scoped queue serializes each accepted management transaction and the live owner's due transaction from preflight through any post-append barrier. `schedule_create` requires exactly one of `after_seconds`, `at`, or `every_seconds`, validates shape-only failures before entering the queue, then checkpoints, allocates a never-reused id, appends create, and checkpoints again. `schedule_list` returns active records in creation order with `state: "scheduled" | "overdue"` and `deliveryMode: "session-local"`. `schedule_delete` rejects an empty or whitespace-padded id before the queue and appends only for an active id; an unknown or terminal id returns `{ id, deleted: false, code: "schedule_not_found" }` after preflight.
 
@@ -36,11 +38,11 @@ The closed version-1 domain error codes are `invalid_prompt`, `invalid_selector`
 
 The live owner derives the earliest target from the durable fold. It splits waits longer than the Node timer range and rereads the wall clock after every wake, so a rollback cannot fire early and a forward jump makes the record overdue. Due one-shots have priority and enter one later turn at a time. When no one-shot is due, all overdue Every records form one batch in target and creation order.
 
-An overdue reminder first checkpoints persistence. If a turn or another maintenance task owns the Agent, `runMaintenance()` rejects the idle-phase claim; the record stays active and the owner retries after `whenIdle()`. A successful maintenance task refolds, samples one decision time, builds the appropriate fixed framing, synchronously queues `followup()`, and appends dispatch before releasing the phase. A one-shot appends its id. Each Every record in a batch appends its id plus the same `acceptedAt`; integer arithmetic selects that record's latest due creation-anchor-aligned occurrence and advances it directly to the first future target. Missed intervals are never enumerated or replayed, distinct overdue records each contribute one occurrence, and there is no shared recurrence gate. Waking input remains parked until release, after which the owner checkpoints dispatch.
+An overdue reminder first checkpoints persistence. If a turn or another maintenance task owns the Agent, `runMaintenance()` rejects the idle-phase claim; the record stays active and the owner retries after `whenIdle()`. A successful maintenance task refolds, samples one decision time, delivers the reminder (session-local framing and `followup()`, or a fresh `ctx.agents.create()` plus the raw prompt for `new-session`), and appends dispatch before releasing the phase. A one-shot appends its id. Each Every record in a batch appends its id plus the same `acceptedAt`; integer arithmetic selects that record's latest due creation-anchor-aligned occurrence and advances it directly to the first future target. Missed intervals are never enumerated or replayed, distinct overdue records each contribute one occurrence, and there is no shared recurrence gate. Waking input remains parked until release, after which the owner checkpoints dispatch.
 
-The follow-up opens a normal later turn after the Agent becomes fully idle; it never steers or interrupts the current conversation. Its assistant output appears through the ordinary transcript, with no independent receipt or Schedule-specific browser UI. Dispatch means the follow-up was queued and recorded, not that the model succeeded or the user read the answer.
+For `session-local` delivery, the follow-up opens a normal later turn after the Agent becomes fully idle; it never steers or interrupts the current conversation. Its assistant output appears through the ordinary transcript, with no independent receipt or Schedule-specific browser UI. For `new-session` delivery, the owner instead resolves the scheduling session's `cwd` and agent preset, creates a fresh root session (`ctx.agents.create`), and queues the stored prompt there as the new session's own first follow-up — the original session is untouched by that delivery. A due Every batch delivers its `new-session` records individually (each starting its own session) and its remaining `session-local` records as one batch, same as before. Dispatch means the follow-up was queued and recorded (or, for `new-session`, that the new session was created and the prompt queued there), not that the model succeeded or the user read the answer.
 
-Framing or synchronous follow-up failure writes no dispatch. An append failure faults that owner because the message may already be queued; a barrier rejection leaves dispatch pending for a later ordinary preflight. Agent or plugin disposal cancels timers, stops new work, and awaits in-flight preflights and idle waits without deleting durable records.
+Framing, new-session creation, or synchronous follow-up failure writes no dispatch. An append failure faults that owner because the message may already be queued; a barrier rejection leaves dispatch pending for a later ordinary preflight. Agent or plugin disposal cancels timers, stops new work, and awaits in-flight preflights and idle waits without deleting durable records.
 
 ## Model Experience
 
@@ -62,7 +64,9 @@ The three schemas remain prefix-stable while their definitions and scope stay un
 
 #### What the model sees
 
-For each admitted due one-shot, the package queues this stable user-role framing with JSON-escaped dynamic values:
+For each admitted due one-shot with `deliveryMode: 'new-session'`, the package instead starts a fresh root session and queues the stored prompt there as a plain user message, unwrapped — the new session has no prior schedule context to present it against.
+
+For a `session-local` one-shot, the package queues this stable user-role framing with JSON-escaped dynamic values:
 
 ##### Reminder framing
 
@@ -86,7 +90,7 @@ The reminder appends after existing history and preserves its reusable prefix. I
 
 #### What the model sees
 
-When one or more Every records are overdue, the package queues one stable user-role framing. `reminders_json` is a JSON array in target and creation order; each object has `schedule_id`, the selected latest `occurrence_at`, and the `reminder_prompt` supplied at creation:
+`new-session` Every records due in the same batch each deliver individually — a fresh root session per record, with its stored prompt queued there unwrapped — exactly like a `new-session` one-shot. The remaining `session-local` records in that batch still queue one stable user-role framing. `reminders_json` is a JSON array in target and creation order; each object has `schedule_id`, the selected latest `occurrence_at`, and the `reminder_prompt` supplied at creation:
 
 ##### Fixed-rate batch framing
 
@@ -106,7 +110,7 @@ The batch appends after existing history and preserves its reusable prefix. Its 
 
 ## Known Limitations and Deferred Work
 
-- **Session-local delivery only** — a reminder runs on time only while its original Session is live; a cold Session receives no external notification and processes an overdue record only after resume.
+- **`session-local` delivery runs only while the original Session is live** — a cold Session receives no external notification and processes an overdue `session-local` record only after resume. `new-session` delivery does not have this limitation: it starts a fresh session regardless of whether the scheduling session is live.
 - **Activity-driven retry** — a rejected due preflight or contained framing/enqueue failure leaves the record active but starts no private retry timer; later Agent activity or a successful Schedule preflight triggers recomputation.
 - **Explicit local zone** — `at` never imports browser context; callers must translate natural language into either an offset-bearing RFC 3339 string or a local object with `time_zone`.
 - **Fixed intervals, not calendar rules** — `every_seconds` is creation-anchor-aligned and cannot run more often than every five minutes; calendar or Cron expressions are not part of the protocol.

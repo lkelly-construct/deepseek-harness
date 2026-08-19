@@ -21,6 +21,12 @@ export interface AfterScheduleRecord {
   readonly afterSeconds: number
   /** Four-digit-year RFC 3339 UTC target. */
   readonly scheduledAt: string
+  /**
+   * Delivery boundary. Absent means `'session-local'` (every record created
+   * before this field existed); only `'new-session'` is ever persisted
+   * explicitly, keeping the default shape byte-identical to v1.
+   */
+  readonly deliveryMode?: ScheduleDeliveryMode
 }
 
 /** Durable one-shot reminder created from an absolute instant. */
@@ -33,6 +39,12 @@ export interface AtScheduleRecord {
   readonly prompt: string
   /** Four-digit-year RFC 3339 UTC target. */
   readonly scheduledAt: string
+  /**
+   * Delivery boundary. Absent means `'session-local'` (every record created
+   * before this field existed); only `'new-session'` is ever persisted
+   * explicitly, keeping the default shape byte-identical to v1.
+   */
+  readonly deliveryMode?: ScheduleDeliveryMode
 }
 
 /** Durable fixed-rate reminder whose next target remains creation-anchor-aligned. */
@@ -47,6 +59,12 @@ export interface EveryScheduleRecord {
   readonly everySeconds: number
   /** Earliest anchor-aligned occurrence not yet dispatched. */
   readonly scheduledAt: string
+  /**
+   * Delivery boundary. Absent means `'session-local'` (every record created
+   * before this field existed); only `'new-session'` is ever persisted
+   * explicitly, keeping the default shape byte-identical to v1.
+   */
+  readonly deliveryMode?: ScheduleDeliveryMode
 }
 
 /** Structured local-calendar input accepted by `schedule_create`. */
@@ -107,8 +125,13 @@ export type ScheduleChange = ScheduleCreateChange | ScheduleDeleteChange | Sched
 /** Current delivery timing derived from the durable record and wall clock. */
 export type ScheduleState = 'scheduled' | 'overdue'
 
-/** Fixed v1 delivery boundary: the original session must be live. */
-export type ScheduleDeliveryMode = 'session-local'
+/**
+ * Delivery boundary for a due reminder: `'session-local'` follows up in the
+ * original live session (the only v1 mode); `'new-session'` starts a fresh
+ * root session on the scheduling session's cwd/preset and delivers the
+ * stored prompt there instead.
+ */
+export type ScheduleDeliveryMode = 'session-local' | 'new-session'
 
 /** Complete model-facing view of one active reminder. */
 export type ScheduleView = ScheduleRecord & {

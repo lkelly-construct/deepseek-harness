@@ -36,12 +36,12 @@ interface RuntimeHarness {
   readonly disposeAgent: () => void
 }
 
-async function harness(): Promise<RuntimeHarness> {
+async function harness(meta?: { cwd?: string; agentPreset?: string }): Promise<RuntimeHarness> {
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
-  const session = ctx.sessions.create(SessionId(`schedule-runtime-${Math.random()}`))
+  const session = ctx.sessions.create(SessionId(`schedule-runtime-${Math.random()}`), meta === undefined ? {} : { meta })
   const followed: UserMessage[] = []
   const order: string[] = []
   const controls = {
@@ -130,6 +130,72 @@ function appendEvery(
 ): void {
   const record = createEveryScheduleRecord(ScheduleId(id), prompt, everySeconds, createdAt)
   test.agent.session.append('schedule/change', { version: 1, operation: 'create', schedule: record })
+}
+
+function appendAfterNewSession(
+  test: RuntimeHarness,
+  id: string,
+  afterSeconds: number,
+  createdAt = Date.now(),
+  prompt = 'check logs',
+): void {
+  const record = createAfterScheduleRecord(ScheduleId(id), prompt, afterSeconds, createdAt, 'new-session')
+  test.agent.session.append('schedule/change', { version: 1, operation: 'create', schedule: record })
+}
+
+function appendEveryNewSession(
+  test: RuntimeHarness,
+  id: string,
+  everySeconds: number,
+  createdAt = Date.now(),
+  prompt = 'check metrics',
+): void {
+  const record = createEveryScheduleRecord(ScheduleId(id), prompt, everySeconds, createdAt, 'new-session')
+  test.agent.session.append('schedule/change', { version: 1, operation: 'create', schedule: record })
+}
+
+/**
+ * Install a fake agent factory so `ctx.agents.create()` resolves to a new
+ * minimal fake agent, mirroring the harness's own root agent but tracked
+ * independently so tests can assert on the spawned session's followups
+ * without touching the original agent's `followed`.
+ */
+function installFakeCreateFactory(test: RuntimeHarness): {
+  readonly createdSessions: Array<{ cwd: string | undefined; agentPreset: string | undefined }>
+  readonly createdFollowed: UserMessage[]
+} {
+  const createdSessions: Array<{ cwd: string | undefined; agentPreset: string | undefined }> = []
+  const createdFollowed: UserMessage[] = []
+  test.ctx.agents.setFactory({
+    async createAgent(_ownerCtx, options) {
+      createdSessions.push({ cwd: options.meta?.cwd, agentPreset: options.meta?.agentPreset })
+      const childSession = test.ctx.sessions.create(options.sessionId, options.meta === undefined ? {} : { meta: options.meta })
+      const childInbox = new Inbox(childSession, { inserted: () => {}, discarded: () => {}, claimed: () => {} })
+      const childAgent: Agent = {
+        id: childSession.id,
+        options: {},
+        session: childSession,
+        inbox: childInbox,
+        status: 'idle',
+        ctx: new Context(),
+        send(_message: UserMessage, _target: InboxTarget, _wakeup: boolean) {},
+        runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T> {
+          return task(new AbortController().signal)
+        },
+        cancel(_cause: AgentCancelCause) {},
+        whenIdle() { return Promise.resolve(undefined) },
+        followup(message: UserMessage) { createdFollowed.push(message) },
+        steer(_message: UserMessage) {},
+        inject(_message: UserMessage) {},
+      }
+      const dispose = test.ctx.agents.register(childAgent)
+      return { agent: childAgent, dispose: () => { dispose(); return Promise.resolve() } }
+    },
+    async resume() {
+      throw new Error('resume is not used by these tests')
+    },
+  })
+  return { createdSessions, createdFollowed }
 }
 
 async function settle(): Promise<void> {
@@ -794,5 +860,86 @@ describe('Schedule runtime failure and teardown boundaries', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     await settle()
     expect(test.followed).toEqual([])
+  })
+})
+
+describe('new-session delivery mode', () => {
+  it('starts a fresh root session and delivers the stored prompt there, not the original agent', async () => {
+    const test = await harness()
+    const factory = installFakeCreateFactory(test)
+    appendAfterNewSession(test, 'schedule-1', 10, Date.now(), 'water the plants')
+    const runtime = runtimeFor(test)
+    runtime.start()
+    await settle()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    await settle()
+
+    expect(test.followed).toEqual([])
+    expect(factory.createdSessions).toHaveLength(1)
+    expect(factory.createdFollowed).toHaveLength(1)
+    expect(factory.createdFollowed[0]?.content).toEqual([{ type: 'text', text: 'water the plants' }])
+    expect(test.agent.session.events.find(event =>
+      event.type === 'schedule/change' && event.data.operation === 'dispatch')).toBeDefined()
+    await runtime.dispose()
+  })
+
+  it('resolves cwd and preset from the scheduling session for the new session', async () => {
+    const test = await harness({ cwd: '/work/project', agentPreset: 'code' })
+    const factory = installFakeCreateFactory(test)
+    appendAfterNewSession(test, 'schedule-1', 10)
+    const runtime = runtimeFor(test)
+    runtime.start()
+    await settle()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    await settle()
+
+    expect(factory.createdSessions).toEqual([{ cwd: '/work/project', agentPreset: 'code' }])
+    await runtime.dispose()
+  })
+
+  it('does not dispatch when new-session creation fails, leaving the record active for retry', async () => {
+    const test = await harness()
+    test.ctx.agents.setFactory({
+      async createAgent() { throw new Error('no capacity') },
+      async resume() { throw new Error('unused') },
+    })
+    appendAfterNewSession(test, 'schedule-1', 10)
+    const runtime = runtimeFor(test)
+    runtime.start()
+    await settle()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    await settle()
+
+    expect(test.followed).toEqual([])
+    expect(test.agent.session.events.find(event =>
+      event.type === 'schedule/change' && event.data.operation === 'dispatch')).toBeUndefined()
+    await runtime.dispose()
+  })
+
+  it('delivers a new-session Every reminder individually while a mixed session-local batch still follows up', async () => {
+    const test = await harness()
+    const factory = installFakeCreateFactory(test)
+    appendEveryNewSession(test, 'schedule-remote', 300, Date.now(), 'check remote metrics')
+    appendEvery(test, 'schedule-local', 300, Date.now(), 'check local metrics')
+    const runtime = runtimeFor(test)
+    runtime.start()
+    await settle()
+
+    await vi.advanceTimersByTimeAsync(300_000)
+    await settle()
+
+    expect(factory.createdFollowed).toHaveLength(1)
+    expect(factory.createdFollowed[0]?.content).toEqual([{ type: 'text', text: 'check remote metrics' }])
+    expect(test.followed).toHaveLength(1)
+    const batchText = (test.followed[0]?.content[0] as { type: 'text'; text: string }).text
+    expect(batchText).toContain('check local metrics')
+    expect(batchText).not.toContain('check remote metrics')
+    const dispatches = test.agent.session.events.filter(event =>
+      event.type === 'schedule/change' && event.data.operation === 'dispatch')
+    expect(dispatches).toHaveLength(2)
+    await runtime.dispose()
   })
 })

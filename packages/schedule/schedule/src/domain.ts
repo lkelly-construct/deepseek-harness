@@ -12,6 +12,7 @@ import type {
   LocalAtInput,
   OneShotScheduleRecord,
   ScheduleChange,
+  ScheduleDeliveryMode,
   ScheduleId as ScheduleIdType,
   ScheduleRecord,
   ScheduleView,
@@ -381,10 +382,27 @@ function resolveLocalInstant(parts: CalendarParts, timeZone: string): number {
   return first
 }
 
-/** Decode the exact v1 after record shape. */
+/**
+ * Decode an optional `deliveryMode` key already confirmed present by the
+ * caller's exact-key check. Only `'new-session'` is ever persisted by this
+ * package's own encoder (the default `'session-local'` omits the key
+ * entirely, keeping v1 records byte-identical); a hand-authored or replayed
+ * `'session-local'` value is still accepted so the two shapes stay
+ * equivalent.
+ */
+function decodeDeliveryMode(value: unknown): ScheduleDeliveryMode {
+  if (value !== 'session-local' && value !== 'new-session') {
+    throw new ScheduleLogError('deliveryMode must be "session-local" or "new-session"')
+  }
+  return value
+}
+
+/** Decode the exact v1 after record shape, with or without `deliveryMode`. */
 function decodeAfterRecord(value: unknown): AfterScheduleRecord {
-  if (!isRecord(value) || !hasExactKeys(value, ['id', 'kind', 'prompt', 'afterSeconds', 'scheduledAt'])) {
-    throw new ScheduleLogError('after schedule must contain exactly id, kind, prompt, afterSeconds, and scheduledAt')
+  if (!isRecord(value)) throw new ScheduleLogError('after schedule must be an object')
+  const withMode = hasExactKeys(value, ['id', 'kind', 'prompt', 'afterSeconds', 'scheduledAt', 'deliveryMode'])
+  if (!withMode && !hasExactKeys(value, ['id', 'kind', 'prompt', 'afterSeconds', 'scheduledAt'])) {
+    throw new ScheduleLogError('after schedule must contain exactly id, kind, prompt, afterSeconds, scheduledAt, and optional deliveryMode')
   }
   const prompt = value['prompt']
   if (typeof prompt !== 'string' || prompt.length === 0 || prompt.trim() !== prompt) {
@@ -400,13 +418,16 @@ function decodeAfterRecord(value: unknown): AfterScheduleRecord {
     prompt,
     afterSeconds: afterSeconds as number,
     scheduledAt: decodeInstant(value['scheduledAt']),
+    ...withMode ? { deliveryMode: decodeDeliveryMode(value['deliveryMode']) } : {},
   })
 }
 
-/** Decode the exact v1 absolute one-shot record shape. */
+/** Decode the exact v1 absolute one-shot record shape, with or without `deliveryMode`. */
 function decodeAtRecord(value: unknown): AtScheduleRecord {
-  if (!isRecord(value) || !hasExactKeys(value, ['id', 'kind', 'prompt', 'scheduledAt'])) {
-    throw new ScheduleLogError('at schedule must contain exactly id, kind, prompt, and scheduledAt')
+  if (!isRecord(value)) throw new ScheduleLogError('at schedule must be an object')
+  const withMode = hasExactKeys(value, ['id', 'kind', 'prompt', 'scheduledAt', 'deliveryMode'])
+  if (!withMode && !hasExactKeys(value, ['id', 'kind', 'prompt', 'scheduledAt'])) {
+    throw new ScheduleLogError('at schedule must contain exactly id, kind, prompt, scheduledAt, and optional deliveryMode')
   }
   const prompt = value['prompt']
   if (typeof prompt !== 'string' || prompt.length === 0 || prompt.trim() !== prompt) {
@@ -417,14 +438,16 @@ function decodeAtRecord(value: unknown): AtScheduleRecord {
     kind: 'at',
     prompt,
     scheduledAt: decodeInstant(value['scheduledAt']),
+    ...withMode ? { deliveryMode: decodeDeliveryMode(value['deliveryMode']) } : {},
   })
 }
 
-/** Decode the exact v1 fixed-rate record shape. */
+/** Decode the exact v1 fixed-rate record shape, with or without `deliveryMode`. */
 function decodeEveryRecord(value: unknown): EveryScheduleRecord {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['id', 'kind', 'prompt', 'everySeconds', 'scheduledAt'])) {
-    throw new ScheduleLogError('every schedule must contain exactly id, kind, prompt, everySeconds, and scheduledAt')
+  if (!isRecord(value)) throw new ScheduleLogError('every schedule must be an object')
+  const withMode = hasExactKeys(value, ['id', 'kind', 'prompt', 'everySeconds', 'scheduledAt', 'deliveryMode'])
+  if (!withMode && !hasExactKeys(value, ['id', 'kind', 'prompt', 'everySeconds', 'scheduledAt'])) {
+    throw new ScheduleLogError('every schedule must contain exactly id, kind, prompt, everySeconds, scheduledAt, and optional deliveryMode')
   }
   const prompt = value['prompt']
   if (typeof prompt !== 'string' || prompt.length === 0 || prompt.trim() !== prompt) {
@@ -443,6 +466,7 @@ function decodeEveryRecord(value: unknown): EveryScheduleRecord {
     prompt,
     everySeconds: everySeconds as number,
     scheduledAt: decodeInstant(value['scheduledAt']),
+    ...withMode ? { deliveryMode: decodeDeliveryMode(value['deliveryMode']) } : {},
   })
 }
 
@@ -642,6 +666,8 @@ export function allocateScheduleId(folded: FoldedSchedules): ScheduleIdType {
  * @param prompt - Reminder content supplied at creation.
  * @param afterSeconds - Requested positive delay.
  * @param now - Single creation-time wall-clock sample in epoch milliseconds.
+ * @param deliveryMode - Delivery boundary; defaults to `'session-local'` and
+ * is then omitted from the frozen record, keeping the v1 shape byte-identical.
  * @returns Frozen durable after record.
  */
 export function createAfterScheduleRecord(
@@ -649,6 +675,7 @@ export function createAfterScheduleRecord(
   prompt: string,
   afterSeconds: number,
   now: number,
+  deliveryMode: ScheduleDeliveryMode = 'session-local',
 ): AfterScheduleRecord {
   const normalizedPrompt = prompt.trim()
   if (normalizedPrompt.length === 0) {
@@ -665,6 +692,7 @@ export function createAfterScheduleRecord(
     prompt: normalizedPrompt,
     afterSeconds,
     scheduledAt: futureInstant(target, now),
+    ...deliveryMode === 'new-session' ? { deliveryMode } : {},
   })
 }
 
@@ -674,6 +702,8 @@ export function createAfterScheduleRecord(
  * @param prompt - Reminder content supplied at creation.
  * @param at - Explicit-offset instant or structured local calendar value.
  * @param now - Single creation-time wall-clock sample in epoch milliseconds.
+ * @param deliveryMode - Delivery boundary; defaults to `'session-local'` and
+ * is then omitted from the frozen record, keeping the v1 shape byte-identical.
  * @returns Frozen durable absolute one-shot record.
  */
 export function createAtScheduleRecord(
@@ -681,6 +711,7 @@ export function createAtScheduleRecord(
   prompt: string,
   at: AtInput,
   now: number,
+  deliveryMode: ScheduleDeliveryMode = 'session-local',
 ): AtScheduleRecord {
   const normalizedPrompt = prompt.trim()
   if (normalizedPrompt.length === 0) {
@@ -716,6 +747,7 @@ export function createAtScheduleRecord(
     kind: 'at',
     prompt: normalizedPrompt,
     scheduledAt: futureInstant(target, now),
+    ...deliveryMode === 'new-session' ? { deliveryMode } : {},
   })
 }
 
@@ -725,6 +757,8 @@ export function createAtScheduleRecord(
  * @param prompt - Reminder content supplied at creation.
  * @param everySeconds - Requested fixed safe-integer interval.
  * @param now - Single creation-time wall-clock sample in epoch milliseconds.
+ * @param deliveryMode - Delivery boundary; defaults to `'session-local'` and
+ * is then omitted from the frozen record, keeping the v1 shape byte-identical.
  * @returns Frozen durable fixed-rate record.
  */
 export function createEveryScheduleRecord(
@@ -732,6 +766,7 @@ export function createEveryScheduleRecord(
   prompt: string,
   everySeconds: number,
   now: number,
+  deliveryMode: ScheduleDeliveryMode = 'session-local',
 ): EveryScheduleRecord {
   const normalizedPrompt = prompt.trim()
   if (normalizedPrompt.length === 0) {
@@ -754,6 +789,7 @@ export function createEveryScheduleRecord(
     prompt: normalizedPrompt,
     everySeconds,
     scheduledAt: futureInstant(target, now),
+    ...deliveryMode === 'new-session' ? { deliveryMode } : {},
   })
 }
 
@@ -767,7 +803,7 @@ export function scheduleView(record: ScheduleRecord, now: number): ScheduleView 
   return Object.freeze({
     ...record,
     state: now >= Date.parse(record.scheduledAt) ? 'overdue' : 'scheduled',
-    deliveryMode: 'session-local',
+    deliveryMode: record.deliveryMode ?? 'session-local',
   })
 }
 

@@ -40,7 +40,7 @@ const SHARED_VIEW_PROPERTIES = {
   prompt: { type: 'string', required: true },
   scheduledAt: { type: 'string', required: true },
   state: { type: 'string', required: true, enum: ['scheduled', 'overdue'] },
-  deliveryMode: { type: 'string', required: true, const: 'session-local' },
+  deliveryMode: { type: 'string', required: true, enum: ['session-local', 'new-session'] },
 } as const
 
 const AFTER_VIEW_SCHEMA = {
@@ -150,8 +150,10 @@ const CREATE_DESCRIPTION =
   + `date/time object, or safe-integer every_seconds of at least ${MIN_EVERY_INTERVAL_SECONDS}. `
   + 'Fixed-rate reminders stay creation-aligned, skip missed occurrences, and batch one latest '
   + 'occurrence per overdue rule. '
-  + 'Delivery is session-local: the reminder runs on time only while this session '
-  + 'is live and otherwise becomes overdue until the session is resumed.'
+  + 'Delivery defaults to session-local: the reminder runs on time only while this session '
+  + 'is live and otherwise becomes overdue until the session is resumed. delivery_mode: new-session instead '
+  + 'starts a fresh root session (same cwd and preset as this one) and delivers the prompt there when due, '
+  + 'independent of whether this session is live.'
 
 const LIST_DESCRIPTION =
   'List every active reminder in the current session in creation order, including its exact id, '
@@ -255,18 +257,27 @@ function validateCreateArgs(args: {
   after_seconds?: number
   at?: AtInput
   every_seconds?: number
+  delivery_mode?: string
 }): ScheduleToolError | undefined {
   const keys = Object.keys(args as unknown as Record<string, unknown>)
   if (keys.some(key => key !== 'prompt'
     && key !== 'after_seconds'
     && key !== 'at'
-    && key !== 'every_seconds')
+    && key !== 'every_seconds'
+    && key !== 'delivery_mode')
     || Number(args.after_seconds !== undefined)
     + Number(args.at !== undefined)
     + Number(args.every_seconds !== undefined) !== 1) {
     return {
       code: 'invalid_selector',
       message: 'schedule_create accepts exactly one of after_seconds, at, or every_seconds.',
+    }
+  }
+  if (args.delivery_mode !== undefined
+    && args.delivery_mode !== 'session-local' && args.delivery_mode !== 'new-session') {
+    return {
+      code: 'invalid_rule',
+      message: 'delivery_mode must be "session-local" or "new-session".',
     }
   }
   if (args.prompt.trim().length === 0) {
@@ -346,6 +357,13 @@ export function registerScheduleTools(
             },
           ],
         },
+        delivery_mode: {
+          type: 'string',
+          enum: ['session-local', 'new-session'],
+          description: 'Defaults to session-local (this session, must be live). new-session starts a fresh '
+            + 'root session on this session\'s working directory and preset when the reminder becomes due, '
+            + 'and delivers the prompt there instead.',
+        },
       },
       output: { schema: CREATE_OUTPUT_SCHEMA, render: renderValue },
       async execute(args, exec): Promise<ScheduleCreateValue> {
@@ -359,18 +377,20 @@ export function registerScheduleTools(
           const folded = foldForTool(agent)
           if (isToolError(folded)) return folded
           const id = allocateScheduleId(folded)
+          const deliveryMode = args.delivery_mode ?? 'session-local'
           let record: ScheduleRecord
           try {
             if (args.at !== undefined) {
-              record = createAtScheduleRecord(id, args.prompt, args.at, Date.now())
+              record = createAtScheduleRecord(id, args.prompt, args.at, Date.now(), deliveryMode)
             } else if (args.after_seconds !== undefined) {
-              record = createAfterScheduleRecord(id, args.prompt, args.after_seconds, Date.now())
+              record = createAfterScheduleRecord(id, args.prompt, args.after_seconds, Date.now(), deliveryMode)
             } else {
               record = createEveryScheduleRecord(
                 id,
                 args.prompt,
                 args.every_seconds as number,
                 Date.now(),
+                deliveryMode,
               )
             }
           } catch (error: unknown) {

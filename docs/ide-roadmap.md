@@ -85,7 +85,7 @@ root `package.json` workspaces, `tsdown.config.ts`, `.oxlintrc.json`.
    list of exactly `lib/index.js`, `lib/invariant.js`, `lib/types/**/*.d.ts`.
 4. `tsconfig.json` extending `../../../tsconfig.base.json`, `rootDir: src`,
    `outDir: lib/types`, with `references` to `vendor/cosmokit`, `vendor/cordis`
-   (+ `schemastery` if using `Config`, + each dsh dep).
+   (+ `@deepseek-ai/schemastery` if using `Config`, + each dsh dep).
 5. `README.md` with the gated `## Model Experience` section (three ordered H4s)
    and `## Known Limitations and Deferred Work`, or an allowlist entry in
    `scripts/verify-package-readme-*.ts`.
@@ -350,7 +350,7 @@ Commit: `feat(preset): T1-2 add supabase MCP preset`
 #### Audit findings (verified 2026-08-18)
 
 1. **Bash idioms in prompt text — no changes needed.**
-   `standard`, `code`, and `cordis` presets correctly disable `tool-bash` on
+   `standard`, `code`, and `@deepseek-ai/cordis` presets correctly disable `tool-bash` on
    Windows (`disabled: !!js process.platform === 'win32'`) and enable `tool-pwsh`.
    Persona text is platform-agnostic. The `tool:bash` system-prompt section only
    registers when the plugin is loaded (not on Windows). The `tool:pwsh` section

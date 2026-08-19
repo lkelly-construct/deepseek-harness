@@ -178,7 +178,7 @@ export function PluginInventorySettingsTab({ list, t }: PluginInventorySettingsT
                           </div>
                           {entry.enabled ? (
                             <div>
-                              <dt>{t('cordis')}</dt>
+                              <dt>{t('@deepseek-ai/cordis')}</dt>
                               <dd>{status}</dd>
                             </div>
                           ) : null}

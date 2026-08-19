@@ -1,6 +1,6 @@
 /** Cordis dynamic-plugin UI dictionaries. */
 
-export const NS = 'cordis'
+export const NS = '@deepseek-ai/cordis'
 
 /** Simplified Chinese Cordis UI messages. */
 export const zh = {

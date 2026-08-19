@@ -801,6 +801,24 @@
       "ignoreDependencies": [
         "@deepseek-ai/.+"
       ]
+    },
+    "packages/memory/memory-local": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/routing/model-router": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/storage/tool-artifact-publish": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
     }
   }
 }

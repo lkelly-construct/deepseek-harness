@@ -41,3 +41,6 @@ pre-push:
   jobs:
     - name: typecheck
       run: pnpm run typecheck
+
+    - name: hygiene
+      run: pnpm run hygiene

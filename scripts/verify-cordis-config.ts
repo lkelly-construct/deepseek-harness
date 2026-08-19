@@ -268,8 +268,18 @@ function validateAppResolution(): string[] {
     ...Object.fromEntries(globSync('packages/bundle/*/package.json', { cwd: root })
       .flatMap(file => Object.entries(readManifest(file).dependencies ?? {}))),
   }
-  const shipped = new Set(globSync('*.cordis.yml', { cwd: resolve(root, 'apps/cli/config') })
-    .map(file => `apps/cli/config/${file}`))
+  // Shipped agent-preset compositions resolve from the SAME surface as the app
+  // overlays, so they belong in this check. They were once excluded here by a
+  // non-recursive glob, which let three preset-mounted plugins ship inert: the
+  // rows named packages that no consumer manifest declared, so
+  // healProfilesModuleFallback never linked them and the Loader could not
+  // resolve the name. Keep both globs — the flat one for `apps/cli/config/*`,
+  // the nested one for the presets.
+  const shipped = new Set([
+    ...globSync('*.cordis.yml', { cwd: resolve(root, 'apps/cli/config') })
+      .map(file => `apps/cli/config/${file}`),
+    ...globSync('apps/cli/config/agent-presets/*/agent.cordis.yml', { cwd: root }),
+  ])
   const appReferences = pluginReferences.filter(reference => shipped.has(reference.file) || appOverlayFiles.has(reference.file))
   violations.push(...missingPluginDependencies(appReferences, appDependencies, 'apps/cli/package.json or a bundle manifest'))
   // Each bundle's patch rows must resolve from that bundle's own dependencies:

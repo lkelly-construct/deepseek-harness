@@ -8,6 +8,7 @@
 
 import { pathToFileURL } from 'node:url'
 import { readFileSync } from 'node:fs'
+import { getSkippedBfsDeps } from './profile.ts'
 import { parseEnv } from 'node:util'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import * as yaml from 'js-yaml'
@@ -31,6 +32,7 @@ declare module '@deepseek-ai/cordis' {
 export {
   composeEntries,
   DEFAULT_PROFILE_BUNDLES,
+  getSkippedBfsDeps,
   healProfilesModuleFallback,
   initProfile,
   loadProfile,
@@ -658,8 +660,21 @@ export function installFailLoud(
 export function assertEntriesLoaded(ctx: Context, binName: string): void {
   const failed = [...ctx.loader.entries()].filter(entry => entry.fiber === undefined && !entry.disabled)
   if (failed.length > 0) {
+    const skipped = getSkippedBfsDeps()
     const names = failed.map(entry => entry.options.name).join(', ')
-    throw new Error(`${binName}: plugin(s) failed to load: ${names}; Cordis startup failed because these plugin(s) could not be resolved (see the error(s) logged above)`)
+    const hints = failed.flatMap((entry) => {
+      const declaringManifest = skipped.get(entry.options.name)
+      if (declaringManifest === undefined) return []
+      const rowId = entry.options.id ?? entry.options.name
+      return [
+        `  row ${JSON.stringify(rowId)} (${entry.options.name}) is declared in no consumer manifest`
+        + ` reachable from ${declaringManifest} — add ${entry.options.name} as a dependency`,
+      ]
+    })
+    const hint = hints.length > 0 ? `\n${hints.join('\n')}` : ''
+    throw new Error(
+      `${binName}: plugin(s) failed to load: ${names}; Cordis startup failed because these plugin(s) could not be resolved (see the error(s) logged above)${hint}`,
+    )
   }
 }
 

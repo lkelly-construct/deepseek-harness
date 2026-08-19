@@ -202,6 +202,26 @@ function ensureSymlink(link: string, target: string): void {
 }
 
 /**
+ * Packages that the most recent {@link healProfilesModuleFallback} BFS
+ * encountered but could not resolve: maps package name → the absolute path of
+ * the manifest that declared it. The boot layer reads this to augment
+ * module-not-found errors with the real cause when a composition row names one
+ * of these packages.
+ */
+const skippedBfsDeps = new Map<string, string>()
+
+/**
+ * Return the packages that {@link healProfilesModuleFallback} skipped on its
+ * last run: declared in a reachable manifest but not installed, so they could
+ * not be symlinked into the fallback. Maps package name → the absolute path of
+ * the manifest that declared it. The boot layer uses this to produce a
+ * targeted diagnostic when a composition row names one of these packages.
+ */
+export function getSkippedBfsDeps(): ReadonlyMap<string, string> {
+  return skippedBfsDeps
+}
+
+/**
  * Maintain the flat module fallback `$DSH_HOME/profiles/node_modules`: one
  * symlink per package in the dsh app's resolvable dependency CLOSURE (BFS
  * over `dependencies` from the app manifest), each resolved from its own
@@ -226,6 +246,7 @@ export function healProfilesModuleFallback(installAnchor: string, home: string =
   mkdirSync(modulesDir, { recursive: true })
   const appManifest = JSON.parse(readFileSync(installAnchor, 'utf8')) as ProfileManifest
   const links = new Map<string, string>()
+  skippedBfsDeps.clear()
   /* v8 ignore next -- a real app manifest always declares its name */
   if (appManifest.name !== undefined) links.set(appManifest.name, dirname(installAnchor))
   // BFS over the resolvable dependency graph; the visited set is the link
@@ -240,8 +261,10 @@ export function healProfilesModuleFallback(installAnchor: string, home: string =
       if (links.has(dep)) continue
       const dir = packageDirFromAnchor(next.anchor, dep)
       // A declared-but-uninstalled dependency cannot be a loader-visible
-      // plugin; skip it rather than fail the whole boot.
-      if (dir === undefined) continue
+      // plugin; skip it rather than fail the whole boot, but record the skip
+      // so the boot layer can produce a targeted diagnostic if a composition
+      // row names this package.
+      if (dir === undefined) { skippedBfsDeps.set(dep, next.anchor); continue }
       links.set(dep, dir)
       const manifestPath = join(dir, 'package.json')
       queue.push({ anchor: manifestPath, manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) as ProfileManifest })

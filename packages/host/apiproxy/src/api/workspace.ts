@@ -106,4 +106,14 @@ export interface WorkspaceApi {
    */
   archiveSession(request: RpcRequest<{ sessionId: SessionId }>):
   Promise<RpcResponse<{ archivedSessionIds: SessionId[] }>>
+
+  /**
+   * Removes one session's durable log entirely (JSONL/SQLite artifact
+   * deleted, not just hidden). Unaccounts the session from its workspace and
+   * drops it from the archive set if present. An unknown id fails with
+   * `session-not-found`; the currently active session fails with
+   * `session-active`.
+   */
+  deleteSession(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ deleted: true }>>
 }

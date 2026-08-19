@@ -91,4 +91,12 @@ export interface IWorkspaces {
    * @param sessionId - session to archive.
    */
   archiveSession(sessionId: SessionId): Promise<void>
+  /**
+   * Delete one session's durable log entirely (not just hidden — the
+   * underlying artifact is removed). Unaccounts the session from its
+   * Workspace and drops it from the archive set if present. Rejects for the
+   * currently active session or an unknown session id.
+   * @param sessionId - session to delete.
+   */
+  deleteSession(sessionId: SessionId): Promise<void>
 }

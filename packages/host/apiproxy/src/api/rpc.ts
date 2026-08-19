@@ -33,6 +33,8 @@ export interface RpcErrorDetailsMap {
   'bad-request': { issues: ZodIssue[] }
   'cancelled': {}
   'session-not-found': { sessionId: SessionId }
+  /** A deleteSession request named the currently active session; end or switch away from it first. */
+  'session-active': { sessionId: SessionId }
   'model-unavailable': { provider: string; model: string }
   'session-conflict': { sessionId: SessionId; requestedCwd: string; existingCwd?: string }
   'invalid-time-zone': { value: string }

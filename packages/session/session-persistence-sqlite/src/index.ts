@@ -182,6 +182,26 @@ export class SqliteSessionPersistence extends SessionPersistence implements Pers
     return this.coordinator.append(id, events)
   }
 
+  /**
+   * Remove one session's rows in ONE transaction: delete its events, then its
+   * `sessions` row. A missing session is a silent no-op — the caller has
+   * nothing left to remove.
+   */
+  async delete(id: SessionId, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
+    await this.ready
+    signal?.throwIfAborted()
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare('DELETE FROM events WHERE session_id = ?').run(id)
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }

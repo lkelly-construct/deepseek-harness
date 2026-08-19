@@ -26,6 +26,7 @@ import type { Workspace, WorkspaceRecord } from '@deepseek-ai/dsh-workspace'
 import {
   workspaceDomainState, workspaceRecord, WorkspaceId as brandWorkspaceId,
   WorkspaceMoveInvalidError, WorkspaceOrderInvalidError, WorkspaceUnknownSessionError,
+  WorkspaceSessionActiveError,
 } from '@deepseek-ai/dsh-workspace'
 // Type-only: brings the `ctx.tools` Context merge into this program (viewFor reads presenters).
 import {
@@ -2857,6 +2858,32 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         }
         return ok(request, { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] })
+      },
+
+      async deleteSession(request) {
+        const { sessionId } = request.payload
+        try {
+          await ctx.workspaceRegistry.deleteSession(sessionId)
+        } catch (error: unknown) {
+          // Only the registry's own business rejections are business codes;
+          // storage/durability failures propagate as internal errors.
+          if (error instanceof WorkspaceUnknownSessionError) {
+            return err(request, {
+              code: 'session-not-found',
+              message: error.message,
+              details: { sessionId },
+            })
+          }
+          if (error instanceof WorkspaceSessionActiveError) {
+            return err(request, {
+              code: 'session-active',
+              message: error.message,
+              details: { sessionId },
+            })
+          }
+          throw error
+        }
+        return ok(request, { deleted: true as const })
       },
     },
 

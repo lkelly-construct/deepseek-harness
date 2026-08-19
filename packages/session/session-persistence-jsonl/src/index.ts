@@ -181,6 +181,22 @@ export class JsonlSessionPersistence extends SessionPersistence implements Persi
     return this.coordinator.append(id, events)
   }
 
+  /**
+   * Remove one session's durable log entirely: the per-session directory
+   * (`<project>/<encodedId>/`) holds only this session's artifact, so
+   * deleting it removes the log without touching any sibling session. A
+   * missing log is a silent no-op — the caller has nothing left to remove.
+   */
+  async delete(id: SessionId, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    signal?.throwIfAborted()
+    const path = await this.findLog(id, signal)
+    if (path === undefined) return
+    signal?.throwIfAborted()
+    await rm(dirname(path), { recursive: true, force: true })
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation> {
     return this.coordinator.prepare(id, signal)
   }

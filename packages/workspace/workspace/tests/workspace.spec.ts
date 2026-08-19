@@ -48,7 +48,8 @@ async function harness(options: HarnessOptions = {}) {
   const list = vi.fn(async () => listed)
   const load = vi.fn(() => { throw new Error('event bodies must not be loaded') })
   const inspect = vi.fn(() => { throw new Error('event bodies must not be inspected') })
-  ctx.provide('sessionPersistence', { list, load, inspect } as never)
+  const del = vi.fn(async (id: SessionId) => { listed = listed.filter(session => session.id !== id) })
+  ctx.provide('sessionPersistence', { list, load, inspect, delete: del } as never)
 
   if (options.sessionStore === true) {
     await ctx.plugin(SessionStore)
@@ -75,6 +76,7 @@ async function harness(options: HarnessOptions = {}) {
     list,
     load,
     inspect,
+    delete: del,
     setSessions: (headers: SessionHeader[]) => { listed = headers },
   }
 }
@@ -907,7 +909,7 @@ describe('registry-global session archive', () => {
     expect(result.registry.archivedSessionIds).toEqual(['stray', 'live-only'])
 
     await expect(result.registry.archiveSession(SessionId('ghost')))
-      .rejects.toThrow(/cannot archive session 'ghost'/)
+      .rejects.toThrow(/cannot find session 'ghost'/)
     expect(storedState(result.pool).archivedSessionIds).toEqual(['stray', 'live-only'])
   })
 
@@ -940,5 +942,35 @@ describe('registry-global session archive', () => {
     )
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.archivedSessionIds).toEqual([])
+  })
+})
+
+describe('durable session deletion', () => {
+  it('deletes the durable log, unaccounts the session, and drops it from the archive set', async () => {
+    const dir = await makeDir('delete-home')
+    const result = await harness({ sessions: [header('kept', dir, 100), header('gone', dir, 200)] })
+    const workspace = result.registry.list()[0]!
+    await result.registry.archiveSession(SessionId('gone'))
+    expect(workspace.sessionIds).toEqual(['gone', 'kept'])
+
+    await result.registry.deleteSession(SessionId('gone'))
+    expect(result.delete).toHaveBeenCalledWith(SessionId('gone'))
+    expect(workspace.sessionIds).toEqual(['kept'])
+    expect(result.registry.archivedSessionIds).toEqual([])
+  })
+
+  it('rejects deleting the currently live session without touching persistence', async () => {
+    const dir = await makeDir('delete-live')
+    const result = await harness({ liveSessions: [header('live-only', dir, 100)] })
+    await expect(result.registry.deleteSession(SessionId('live-only')))
+      .rejects.toThrow(/cannot delete session 'live-only': it is currently active/)
+    expect(result.delete).not.toHaveBeenCalled()
+  })
+
+  it('rejects deleting an unknown session without touching persistence', async () => {
+    const result = await harness({ sessions: [] })
+    await expect(result.registry.deleteSession(SessionId('ghost')))
+      .rejects.toThrow(/cannot find session 'ghost'/)
+    expect(result.delete).not.toHaveBeenCalled()
   })
 })

@@ -39,16 +39,33 @@ export function WorkspaceId(id: string): WorkspaceId {
 }
 
 /**
- * An archiveSession request named a session neither live nor in session
- * persistence — a definite miss only; storage faults propagate as themselves.
+ * An archiveSession or deleteSession request named a session neither live nor
+ * in session persistence — a definite miss only; storage faults propagate as
+ * themselves.
  */
 export class WorkspaceUnknownSessionError extends Error {
   /**
    * @param sessionId - The unknown session id.
    */
   constructor(readonly sessionId: SessionId) {
-    super(`cannot archive session '${sessionId}': live sessions and session persistence hold no such session`)
+    super(`cannot find session '${sessionId}': live sessions and session persistence hold no such session`)
     this.name = 'WorkspaceUnknownSessionError'
+  }
+}
+
+/**
+ * A deleteSession request named the currently live (active) session. Deleting
+ * the log a live Session is reading from would desync the two, so the active
+ * session must be ended (or a different one made active) before it can be
+ * deleted.
+ */
+export class WorkspaceSessionActiveError extends Error {
+  /**
+   * @param sessionId - The active session that cannot be deleted.
+   */
+  constructor(readonly sessionId: SessionId) {
+    super(`cannot delete session '${sessionId}': it is currently active`)
+    this.name = 'WorkspaceSessionActiveError'
   }
 }
 
@@ -251,6 +268,40 @@ export class WorkspaceRegistry extends Service {
       }
       const state = this.requireState()
       await this.setState({ ...state, archivedSessionIds: [...state.archivedSessionIds, sessionId] })
+    })
+  }
+
+  /**
+   * Remove one session's durable log entirely. The session must exist (live
+   * or in session persistence) and must not be the currently live session — a
+   * live Session keeps its own in-memory log, so deleting the durable log out
+   * from under it would desync the two. Unaccounts the session from whichever
+   * workspace held it and drops it from the archive set if present.
+   * @param sessionId - The session to delete.
+   * @returns resolution after the durable log and all accounting are updated.
+   */
+  deleteSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      if (this.ctx.get('sessions')?.get(sessionId) !== undefined) {
+        throw new WorkspaceSessionActiveError(sessionId)
+      }
+      if (!(await this.sessionKnown(sessionId))) {
+        throw new WorkspaceUnknownSessionError(sessionId)
+      }
+      await this.ctx.sessionPersistence.delete(sessionId)
+      for (const entity of this.entities.values()) {
+        if (entity.sessionIds.includes(sessionId)) await entity.detachSession(sessionId)
+      }
+      const state = this.requireState()
+      if (state.archivedSessionIds.includes(sessionId)) {
+        await this.setState({
+          ...state,
+          archivedSessionIds: state.archivedSessionIds.filter(id => id !== sessionId),
+        })
+      }
+      this.headers.delete(sessionId)
+      this.sessionPaths.delete(sessionId)
+      this.invalidSessionPaths.delete(sessionId)
     })
   }
 

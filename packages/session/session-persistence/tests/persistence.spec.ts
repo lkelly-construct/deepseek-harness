@@ -101,6 +101,11 @@ class MemoryPersistence extends SessionPersistence implements PersistenceBackend
     return this.coordinator.append(id, events)
   }
 
+  delete(id: SessionId): Promise<void> {
+    this.store.delete(id)
+    return Promise.resolve()
+  }
+
   override prepare(id: SessionId, signal?: AbortSignal): ReturnType<PersistenceCoordinator['prepare']> {
     return this.coordinator.prepare(id, signal)
   }

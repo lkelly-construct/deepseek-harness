@@ -143,6 +143,18 @@ export abstract class SessionPersistence extends Service {
   abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>
 
   /**
+   * Remove one session's durable log entirely. This does not violate the
+   * class's append-only guarantee: append-only protects the *contents* of a
+   * live log (no event is ever edited or reordered) while it exists, not
+   * whether the whole log identity can be removed. A missing session is a
+   * silent no-op.
+   * @param id - session to remove.
+   * @param signal - optional cancellation for the underlying I/O.
+   * @throws When the backend cannot remove the log.
+   */
+  abstract delete(id: SessionId, signal?: AbortSignal): Promise<void>
+
+  /**
    * Prepare the exact unpublished Session used by resume. Implementations may
    * reuse object graphs retained by an earlier {@link inspect} after confirming
    * their durable revision is still current; disposal releases an unpublished

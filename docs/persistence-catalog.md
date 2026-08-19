@@ -529,6 +529,23 @@ Source: [`packages/interaction/permission-presets/src/index.ts:50`](../packages/
 
 Source: [`packages/plan/plan-mode/src/index.ts:53`](../packages/plan/plan-mode/src/index.ts)
 
+### `preset-route/*`
+
+<a id="preset-routellm-request--log-only"></a>
+
+#### `preset-route/llm-request` — log-only
+
+```ts persistence-catalog
+/**
+ * Log-only pre-dispatch record of one preset-classification model request.
+ * The auxiliary request is model-visible, so the repo's model-visible ⟺
+ * logged rule requires it to be reconstructable from the session log.
+ */
+'preset-route/llm-request': PresetRouteLlmRequestEventData
+```
+
+Source: [`packages/preset/preset-router/src/index.ts:39`](../packages/preset/preset-router/src/index.ts)
+
 ### `request/*`
 
 <a id="requestcontext--log-only"></a>

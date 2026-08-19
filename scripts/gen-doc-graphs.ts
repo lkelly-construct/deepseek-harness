@@ -292,6 +292,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Discovers preset directories over trusted and user-authored roots and mounts one preset cordis.yml under an agent scope during creation, rejecting a row that never activates or that publishes into the root service realm.',
   },
   {
+    key: 'presetRouter',
+    pkg: 'preset-router',
+    title: 'Model-backed preset auto-selection',
+    mode: 'core',
+    consumers: ['host-apiproxy'],
+    note: 'Classifies a blank session\'s first prompt against the healthy preset roster through one auxiliary LLM call and returns the preset id to compose from; the gateway applies the swap through the agent-presets recompose seam.',
+  },
+  {
     key: 'commands',
     pkg: 'commands',
     title: 'Human command registry',

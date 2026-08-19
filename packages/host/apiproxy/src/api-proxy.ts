@@ -34,6 +34,8 @@ import {
   PresetNotWritableError, resolveSessionPreset, UnknownPresetError,
 } from '@deepseek-ai/dsh-agent-presets'
 import type { PresetBearingSession } from '@deepseek-ai/dsh-agent-presets'
+// Type-only: brings the `ctx.presetRouter` Context merge into this program.
+import type {} from '@deepseek-ai/dsh-preset-router'
 import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
@@ -2414,6 +2416,41 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
         if ('refused' in resolved) return resolved.refused
         const agent = resolved.agent
+        // Auto-select the preset from the first prompt. A blank session with no
+        // explicit pick is classified by the optional presetRouter service, and
+        // the chosen preset is composed BEFORE followup so the first turn mounts
+        // the classified composition. Best-effort: any failure — an unavailable
+        // router or roster, a timeout, an unclear answer — keeps the session on
+        // its current composition instead of failing the first message.
+        const presetRouter = ctx.get('presetRouter')
+        if (presetRouter !== undefined && sessionBlank(agent.session)) {
+          const presets = ctx.get('agentPresets')
+          const defaultId = presets?.defaultId
+          const current = resolveSessionPreset(agent.session)
+          const alreadySelected = agent.session.events
+            .some(event => event.type === 'agent-preset/selected')
+          if (presets !== undefined && defaultId !== undefined
+            && !alreadySelected && current === defaultId) {
+            const selected = selectionFor(agent).current
+            const chosen = await presetRouter.routeForPrompt({
+              session: agent.session,
+              content,
+              route: { provider: selected.provider, model: selected.model },
+            })
+            if (chosen !== undefined && chosen !== current) {
+              try {
+                const preset = await presets.recompose(agent.ctx, chosen)
+                agent.session.append('agent-preset/selected', { agentPreset: preset.id })
+              } catch (error) {
+                // The roster changed between classification and mount; the
+                // session keeps the composition it started with.
+                ctx.logger.warn(
+                  `preset-router: auto-selected preset "${chosen}" failed to compose for session "${sessionId}": ${String(error)}`,
+                )
+              }
+            }
+          }
+        }
         // Request identity and optional browser zone ride the exact durable user message.
         const source: MessageSource = {
           kind: 'user',

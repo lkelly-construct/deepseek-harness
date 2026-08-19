@@ -422,3 +422,15 @@
       name: '@deepseek-ai/dsh-agent-presets'
       config:
         default: standard
+
+    # Auto-select the preset from a blank session's first prompt (the Web
+    # gateway's session.prompt path applies the choice while still blank).
+    # Host plane: it reads the roster and the LLM route, and the gateway
+    # consumes it — never a single session's composition. No provider/model is
+    # configured, so the classifier rides the session's own model selection.
+    - id: preset-router
+      name: '@deepseek-ai/dsh-preset-router'
+      config:
+        maxInputBytes: 4096
+        maxOutputTokens: 32
+        timeoutMs: 15000

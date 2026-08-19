@@ -970,6 +970,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'presetRouter',
+    summary: 'Registers one model-backed preset router under the `presetRouter` key.',
+    description: 'Registers one model-backed preset router under the `presetRouter` key.\n\nConsumption is optional and host-plane: the Web gateway\'s `session.prompt` path reads `ctx.get(\'presetRouter\')` and applies the returned id only while the session is blank. The router never composes or disposes anything itself; it resolves the roster and returns a choice, leaving the swap to its caller, so it stays swappable and never races a session\'s lifecycle.',
+    methods: [
+      {
+        signature: 'async routeForPrompt(request: PresetRouteRequest): Promise<string | undefined>',
+        description: 'Classify one blank session\'s first prompt into an agent preset id.\n\nBest-effort: any failure — an unavailable roster, an over-long or image-only prompt, a timeout, a non-`DEFAULT` unknown answer — returns `undefined`, never throws, so the caller always proceeds with the default. The exact auxiliary model request is logged to the session before dispatch.',
+        parameters: [{ name: 'request', description: 'the blank session, the first prompt, and the candidate route.' }],
+        returns: 'the preset id to compose from, or `undefined` to keep the default.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -3113,7 +3126,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'GenerateOptions',
-    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
+    declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'preset-route\' | \'session-title\';\n}',
   },
   {
     name: 'GenericCallView',
@@ -3522,6 +3535,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PresetOption',
     declaration: 'export interface PresetOption {\n    value: string;\n    name: string;\n    description?: string;\n}',
+  },
+  {
+    name: 'PresetRoutePromptPart',
+    declaration: 'export interface PresetRoutePromptPart {\n    readonly type: string;\n    readonly text?: string;\n}',
+  },
+  {
+    name: 'PresetRouteRequest',
+    declaration: 'export interface PresetRouteRequest {\n    readonly session: Session;\n    readonly content: readonly PresetRoutePromptPart[];\n    readonly route: PresetRouteSelection;\n    readonly signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'PresetRouteSelection',
+    declaration: 'export interface PresetRouteSelection {\n    readonly provider: string;\n    readonly model: string;\n}',
   },
   {
     name: 'PresetSpec',

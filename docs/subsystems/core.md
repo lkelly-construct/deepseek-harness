@@ -720,6 +720,30 @@ roots(): Agent[]
 
 Source: [`packages/core/agent/src/index.ts:256`](../../packages/core/agent/src/index.ts)
 
+<a id="ctxpresetrouter--presetrouter"></a>
+
+### `ctx.presetRouter` — `PresetRouter`
+
+Registers one model-backed preset router under the `presetRouter` key.
+
+Consumption is optional and host-plane: the Web gateway's `session.prompt` path reads `ctx.get('presetRouter')` and applies the returned id only while the session is blank. The router never composes or disposes anything itself; it resolves the roster and returns a choice, leaving the swap to its caller, so it stays swappable and never races a session's lifecycle.
+
+```ts cordis-catalog
+/**
+ * Classify one blank session's first prompt into an agent preset id.
+ *
+ * Best-effort: any failure — an unavailable roster, an over-long or
+ * image-only prompt, a timeout, a non-`DEFAULT` unknown answer — returns
+ * `undefined`, never throws, so the caller always proceeds with the default.
+ * The exact auxiliary model request is logged to the session before dispatch.
+ * @param request - the blank session, the first prompt, and the candidate route.
+ * @returns the preset id to compose from, or `undefined` to keep the default.
+ */
+async routeForPrompt(request: PresetRouteRequest): Promise<string | undefined>
+```
+
+Source: [`packages/preset/preset-router/src/index.ts:225`](../../packages/preset/preset-router/src/index.ts)
+
 <a id="agent-events"></a>
 
 ### `agent/*` events

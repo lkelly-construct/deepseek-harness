@@ -728,3 +728,124 @@ describe('session.history presenter scope', () => {
     }
   })
 })
+
+describe('auto-detecting the preset from a blank session\'s first prompt', () => {
+  interface RoutedCall {
+    content: unknown
+    route: unknown
+    sessionId: unknown
+  }
+
+  /** Router double returning one fixed result and recording every request. */
+  function routerDouble(result: string | undefined, routed: RoutedCall[]): unknown {
+    return {
+      routeForPrompt: async (request: { session: { id: unknown }; content: unknown; route: unknown }) => {
+        routed.push({ content: request.content, route: request.route, sessionId: request.session.id })
+        return result
+      },
+    }
+  }
+
+  /** A harness whose agents record followup deliveries so a prompt is testable. */
+  async function autoHarness(options: {
+    presets: string[]
+    result: string | undefined
+  }): Promise<{
+    api: Awaited<ReturnType<typeof harness>>['api']
+    ctx: Context
+    routed: RoutedCall[]
+    followups: string[]
+  }> {
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-apiproxy-router-')))
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(UserQuestionService)
+    ctx.provide('sessionPersistence', { list: () => Promise.resolve([]) } as never)
+    ctx.provide('agentPresets', roster(options.presets) as never)
+    const routed: RoutedCall[] = []
+    ctx.provide('presetRouter', routerDouble(options.result, routed) as never)
+    const followups: string[] = []
+    const factory: AgentFactory = {
+      async createAgent(_ownerCtx, createOptions) {
+        const session = ctx.sessions.create(
+          createOptions.sessionId,
+          createOptions.meta === undefined ? {} : { meta: createOptions.meta },
+        )
+        const agent = {
+          id: session.id,
+          session,
+          status: 'idle',
+          followup: async (message: { content: unknown }) => {
+            followups.push(JSON.stringify(message.content))
+          },
+        } as unknown as Agent
+        const agentCtx = ctx.extend({ agent })
+        ;(agent as { ctx?: Context }).ctx = agentCtx
+        await createOptions.setup?.(agentCtx)
+        const unregister = ctx.agents.register(agent)
+        return { agent, dispose: () => { unregister(); return Promise.resolve() } }
+      },
+      async resume() {
+        throw new Error('test harness has no persisted sessions')
+      },
+    }
+    ctx.agents.setFactory(factory)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'test', model: 'test-model' }),
+      cwd,
+    })
+    return { api, ctx, routed, followups }
+  }
+
+  it('classifies a blank session\'s first prompt, composes the choice, then delivers', async () => {
+    const { api, ctx, routed, followups } = await autoHarness({ presets: ['standard', 'minimal'], result: 'minimal' })
+    await api.sessions.create(request({ sessionId: SessionId('auto1') }))
+
+    const sent = await api.sessions.prompt(request({
+      sessionId: SessionId('auto1'),
+      mode: 'queue',
+      content: [{ type: 'text', text: 'run the minimal workflow' }],
+    }))
+
+    expect(sent.result.ok).toBe(true)
+    expect(routed).toHaveLength(1)
+    expect(routed[0]).toMatchObject({ route: { provider: 'test', model: 'test-model' } })
+    const session = ctx.sessions.get(SessionId('auto1'))!
+    expect(session.events.some(event =>
+      event.type === 'agent-preset/selected' && event.data.agentPreset === 'minimal')).toBe(true)
+    expect(followups).toHaveLength(1)
+  })
+
+  it('keeps the default when the router declines', async () => {
+    const { api, ctx, routed, followups } = await autoHarness({ presets: ['standard', 'minimal'], result: undefined })
+    await api.sessions.create(request({ sessionId: SessionId('auto2') }))
+
+    const sent = await api.sessions.prompt(request({
+      sessionId: SessionId('auto2'),
+      mode: 'queue',
+      content: [{ type: 'text', text: 'plain work' }],
+    }))
+
+    expect(sent.result.ok).toBe(true)
+    expect(routed).toHaveLength(1)
+    const session = ctx.sessions.get(SessionId('auto2'))!
+    expect(session.events.some(event => event.type === 'agent-preset/selected')).toBe(false)
+    expect(followups).toHaveLength(1)
+  })
+
+  it('does not route a session whose preset was already chosen', async () => {
+    const { api, routed } = await autoHarness({ presets: ['standard', 'minimal'], result: 'minimal' })
+    await api.sessions.create(request({ sessionId: SessionId('auto3') }))
+    const picked = await api.agentPresets.select(request({ sessionId: SessionId('auto3'), agentPreset: 'minimal' }))
+    expect(picked.result.ok).toBe(true)
+
+    await api.sessions.prompt(request({
+      sessionId: SessionId('auto3'),
+      mode: 'queue',
+      content: [{ type: 'text', text: 'go' }],
+    }))
+
+    expect(routed).toHaveLength(0)
+  })
+})

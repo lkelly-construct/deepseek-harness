@@ -32,6 +32,19 @@ try {
         throw "Project is not built yet. Run this once from $repoPath :  pnpm install ; pnpm run build"
     }
 
+    # Refresh the team's Vercel-managed secrets (OpenRouter, Supabase,
+    # Supabase MCP token) on every launch, not just at initial setup -- a
+    # stale or missing %USERPROFILE%\.dsh\.env is exactly why the
+    # supabase-mcp preset row silently self-disables. Best-effort: offline,
+    # not logged in, or no project access must not block chatting with the
+    # app, which needs none of this.
+    Write-Host ""
+    Write-Host "Refreshing team env vars..." -ForegroundColor Yellow
+    & (Join-Path $repoPath "pull-team-env.ps1")
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Continuing without them -- team-shared rows (Supabase MCP) will stay disabled." -ForegroundColor Gray
+    }
+
     Write-Host ""
     Write-Host "Launching pnpm dsh web..." -ForegroundColor Cyan
     Write-Host "Waiting for server to be ready..." -ForegroundColor Gray
@@ -39,21 +52,10 @@ try {
 
     # The job runs in its own runspace and inherits nothing, so the path is
     # passed in explicitly.
-    # Optional Cordis overlay for MCP servers, resolved from this machine's
-    # own DSH home rather than a hardcoded path -- point $env:DSH_HOME (or
-    # ~/.dsh by default) at a supabase.cordis.yml to load; absent is fine,
-    # it is skipped.
-    $dshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE ".dsh" }
-    $patchPath = Join-Path $dshHome "supabase.cordis.yml"
-
-    $job = Start-Job -ArgumentList $repoPath, $patchPath -ScriptBlock {
-        param($RepoRoot, $Patch)
+    $job = Start-Job -ArgumentList $repoPath -ScriptBlock {
+        param($RepoRoot)
         Set-Location $RepoRoot
-        if ($Patch -and (Test-Path $Patch)) {
-            & pnpm dsh web --patch $Patch 2>&1
-        } else {
-            & pnpm dsh web 2>&1
-        }
+        & pnpm dsh web 2>&1
     }
 
     # Readiness is the printed `dsh web: <url>` line, not the socket accepting

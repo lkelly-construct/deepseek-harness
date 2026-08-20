@@ -161,46 +161,12 @@ echo [7/7] Pulling team environment variables (API keys, Supabase, MCP)...
 echo        This requires a Corvus Construction Vercel account.
 echo.
 
-REM Install Vercel CLI globally if it isn't already present.
-where vercel >nul 2>&1
-if errorlevel 1 (
-    echo   [..] Vercel CLI not found. Installing...
-    call npm install -g vercel
-    if errorlevel 1 (
-        echo   [!!] Could not install Vercel CLI - skipping key setup.
-        echo        Ask a team member to copy %USERPROFILE%\.dsh\.env from their machine.
-        goto :vercel_done
-    )
-    echo   [OK] Vercel CLI installed
-)
-
-REM Check if already authenticated - vercel whoami exits 0 if logged in.
-vercel whoami >nul 2>&1
-if errorlevel 1 (
-    echo   [..] You are not logged into Vercel.
-    echo        A browser window will open - sign in with your Corvus Construction account.
-    echo.
-    call vercel login
-    if errorlevel 1 (
-        echo   [!!] Vercel login failed or was cancelled - skipping key setup.
-        echo        Re-run this step manually: vercel env pull "%USERPROFILE%\.dsh\.env" --project corax --yes
-        goto :vercel_done
-    )
-    echo   [OK] Logged into Vercel
-)
-
-REM Pull all team env vars from the corax Vercel project into .dsh\.env
-call vercel env pull "%USERPROFILE%\.dsh\.env" --project corax --yes
-if errorlevel 1 (
-    echo   [!!] vercel env pull failed.
-    echo        Make sure your Vercel account has access to the "corax" project.
-    echo        Re-run manually: vercel env pull "%USERPROFILE%\.dsh\.env" --project corax --yes
-    goto :vercel_done
-)
-echo   [OK] Team env vars written to %USERPROFILE%\.dsh\.env
-echo        Includes: OpenRouter, Supabase (all projects), Supabase MCP token
-
-:vercel_done
+REM Shared with start-dsh.ps1's every-launch refresh, so both entry points
+REM pull the same way instead of drifting apart. -AllowLogin is passed here
+REM because an interactive browser sign-in is already the expected flow
+REM during first-time setup; start-dsh.ps1 omits it so a later double-click
+REM of the Desktop shortcut never blocks on a sign-in nobody asked for.
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -NoProfile -File "%INSTALL_DIR%\pull-team-env.ps1" -AllowLogin
 
 echo.
 echo ============================================================

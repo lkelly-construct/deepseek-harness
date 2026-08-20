@@ -46,3 +46,8 @@ worktrees/
 
 # VS Code extension build output (apps/vscode/tsconfig.json outDir).
 apps/vscode/out/
+
+# Packaged VS Code extension. Not shipped by DEPLOY-ONE-CLICK.bat -- the
+# extension iframes the Web UI instead of driving the SDK, so its diff-review
+# and path-jump features do not work (docs/improvement-plan.md Phase 3).
+*.vsix

@@ -7,10 +7,14 @@ REM    1. Verify Node.js and Git
 REM    2. Install pnpm if missing
 REM    3. Clone the repository
 REM    4. Install dependencies and build
-REM    5. Apply team config (models, plugins, time-context)
+REM    5. Apply team config (models, plugins, timezone)
 REM    6. Create the Desktop shortcut
-REM    7. Install VS Code extension (if VS Code is present)
-REM    8. Pull Supabase env vars via Vercel CLI (artifact publishing)
+REM    7. Pull Supabase env vars via Vercel CLI
+REM
+REM  The VS Code extension is not installed by this script -- it iframes the
+REM  Web UI instead of driving the SDK directly, so its diff-review and
+REM  path-jump features do not work (see docs/improvement-plan.md Phase 3).
+REM  Use the Web UI at the URL this script prints.
 REM
 REM  Prerequisite: Node.js 22.19+ (https://nodejs.org)
 REM  Time: ~25-30 minutes on first run
@@ -40,7 +44,7 @@ echo Install to:  %INSTALL_DIR%
 echo.
 
 REM ---------------- Step 1: prerequisites ----------------
-echo [1/8] Checking prerequisites...
+echo [1/7] Checking prerequisites...
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -78,7 +82,7 @@ if errorlevel 1 (
 
 REM ---------------- Step 2: get the code ----------------
 echo.
-echo [2/8] Getting the code...
+echo [2/7] Getting the code...
 if exist "%INSTALL_DIR%\.git" (
     echo   [OK] Repository already present
 ) else (
@@ -95,7 +99,7 @@ cd /d "%INSTALL_DIR%"
 
 REM ---------------- Step 3: dependencies ----------------
 echo.
-echo [3/8] Installing dependencies (a few minutes)...
+echo [3/7] Installing dependencies (a few minutes)...
 call pnpm install
 if errorlevel 1 (
     echo [ERROR] pnpm install failed.
@@ -106,7 +110,7 @@ echo   [OK] Dependencies installed
 
 REM ---------------- Step 4: build ----------------
 echo.
-echo [4/8] Building (10-15 minutes - this is normal)...
+echo [4/7] Building (10-15 minutes - this is normal)...
 call pnpm run build
 if errorlevel 1 (
     echo [ERROR] Build failed.
@@ -117,7 +121,7 @@ echo   [OK] Build complete
 
 REM ---------------- Step 5: apply team config ----------------
 echo.
-echo [5/8] Applying team configuration...
+echo [5/7] Applying team configuration...
 
 set "DSH_DIR=%USERPROFILE%\.dsh"
 set "DSH_PROFILE_DIR=%DSH_DIR%\profiles\web"
@@ -136,13 +140,13 @@ if not exist "%DSH_DIR%\settings.yaml" (
     echo        To reset to team defaults: copy "%CONFIG_SRC%\settings.yaml" "%DSH_DIR%\settings.yaml"
 )
 
-REM Always update cordis.patch.yml (time-context plugin, no secrets)
+REM Always update cordis.patch.yml (system-prompt timezone, no secrets)
 copy /Y "%CONFIG_SRC%\cordis.patch.yml" "%DSH_PROFILE_DIR%\cordis.patch.yml" >nul
-echo   [OK] cordis.patch.yml applied (time-context plugin - agent knows current date/time)
+echo   [OK] cordis.patch.yml applied (system-prompt timezone for the harness:date section)
 
 REM ---------------- Step 6: shortcut ----------------
 echo.
-echo [6/8] Creating Desktop shortcut...
+echo [6/7] Creating Desktop shortcut...
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -NoProfile -File "%INSTALL_DIR%\create-shortcut.ps1"
 if errorlevel 1 (
     echo [ERROR] Shortcut creation failed.
@@ -150,59 +154,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM ---------------- Step 7: VS Code extension ----------------
+REM ---------------- Step 7: pull team env vars via Vercel CLI ----------------
 echo.
-echo [7/8] Installing VS Code extension...
-
-REM Locate the VS Code CLI - check PATH first, then common install locations
-set "CODE_CMD="
-where code >nul 2>&1
-if not errorlevel 1 (
-    set "CODE_CMD=code"
-) else if exist "%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd" (
-    set "CODE_CMD=%LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd"
-) else if exist "%ProgramFiles%\Microsoft VS Code\bin\code.cmd" (
-    set "CODE_CMD=%ProgramFiles%\Microsoft VS Code\bin\code.cmd"
-)
-
-if not defined CODE_CMD (
-    echo   [--] VS Code not found - skipping extension install
-    echo        To install later: open VS Code, press Ctrl+Shift+P,
-    echo        choose "Install from VSIX", pick apps\vscode\dsh.vsix
-    goto :vscode_done
-)
-
-echo   [..] Compiling extension...
-call pnpm --filter dsh-vscode run build
-if errorlevel 1 (
-    echo [ERROR] VS Code extension compile failed.
-    echo        The web UI is still fully functional without it.
-    goto :vscode_done
-)
-
-echo   [..] Packaging extension...
-call pnpm --filter dsh-vscode run package:vsix
-if errorlevel 1 (
-    echo [ERROR] VS Code extension packaging failed.
-    echo        The web UI is still fully functional without it.
-    goto :vscode_done
-)
-
-echo   [..] Installing extension into VS Code...
-call "%CODE_CMD%" --install-extension "%INSTALL_DIR%\apps\vscode\dsh.vsix" --force
-if errorlevel 1 (
-    echo [ERROR] VS Code extension install failed.
-    echo        You can install it manually: apps\vscode\dsh.vsix
-    goto :vscode_done
-)
-echo   [OK] VS Code extension installed (command: DSH: Open Chat)
-
-:vscode_done
-cd /d "%INSTALL_DIR%"
-
-REM ---------------- Step 8: pull team env vars via Vercel CLI ----------------
-echo.
-echo [8/8] Pulling team environment variables (API keys, Supabase, MCP)...
+echo [7/7] Pulling team environment variables (API keys, Supabase, MCP)...
 echo        This requires a Corvus Construction Vercel account.
 echo.
 
@@ -265,10 +219,8 @@ echo   5. Click Apply, pick a model, start chatting
 echo.
 echo Models pre-configured: Auto Router, DeepSeek V4, Qwen3, Gemini Flash Image
 echo Web search: enabled (via Vercel env pull)
-echo Time awareness: enabled (agent always knows the current date/time)
+echo Date awareness: enabled (agent's system prompt states today's date)
 echo Supabase MCP: enabled for all Corax projects (via Vercel env pull)
-echo Artifact publishing: enabled (uploads to Corax AI Supabase project)
-echo VS Code: DSH: Open Chat command available (if VS Code was detected)
 echo.
 echo Close the PowerShell window to stop the server.
 echo.

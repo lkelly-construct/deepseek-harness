@@ -2029,6 +2029,8 @@ importers:
         specifier: ^18.2.0
         version: 18.3.1(react@18.3.1)
 
+  packages/client/ui-file-explorer: {}
+
   packages/client/ui-goal:
     devDependencies:
       '@deepseek-ai/cordis':

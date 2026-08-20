@@ -63,7 +63,7 @@ describe('PluginInventorySettingsTab', () => {
     expect(active.getAttribute('aria-expanded')).toBe('true')
     expect(view.container.querySelector('[data-loader-entry]')?.textContent).toBe('8a1b2c3d')
     expect(screen.getByText(en.configuration)).toBeTruthy()
-    expect(screen.getByText(en.cordis)).toBeTruthy()
+    expect(screen.getByText(en['@deepseek-ai/cordis'])).toBeTruthy()
     fireEvent.click(active)
     expect(view.container.querySelector('[data-loader-entry]')).toBeNull()
 
@@ -74,7 +74,7 @@ describe('PluginInventorySettingsTab', () => {
     expect(view.container.querySelector('[data-loader-entry]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'directory-picker-native, Disabled' }))
     expect(screen.getAllByText(en.disabledTag)).toHaveLength(2)
-    expect(screen.queryByText(en.cordis)).toBeNull()
+    expect(screen.queryByText(en['@deepseek-ai/cordis'])).toBeNull()
     expect(screen.queryByText(en.unobserved)).toBeNull()
   })
 

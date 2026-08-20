@@ -49,7 +49,7 @@ vercel whoami *> $null
 if ($LASTEXITCODE -ne 0) {
     if (-not $AllowLogin) {
         Say "  [--] Not logged into Vercel -- skipping team env refresh." Gray
-        Say "       To refresh: vercel login ; vercel env pull `"$envPath`" --project corax --yes" Gray
+        Say "       To refresh: vercel login ; vercel env pull `"$envPath`" --environment=production --project corax --yes" Gray
         exit 1
     }
     # An outdated CLI shows the legacy provider-picker login (GitHub/GitLab/
@@ -67,16 +67,22 @@ if ($LASTEXITCODE -ne 0) {
     vercel login
     if ($LASTEXITCODE -ne 0) {
         Say "  [!!] Vercel login failed or was cancelled -- team env vars not refreshed." Red
-        Say "       Re-run manually: vercel login ; vercel env pull `"$envPath`" --project corax --yes" Gray
+        Say "       Re-run manually: vercel login ; vercel env pull `"$envPath`" --environment=production --project corax --yes" Gray
         exit 1
     }
     Say "  [OK] Logged into Vercel" Green
 }
 
-vercel env pull $envPath --project corax --yes *> $null
+# `vercel env pull` defaults to the Development environment, and every
+# secret on this project (SUPABASE_ACCESS_TOKEN included) is scoped to
+# Preview/Production only -- a pull without --environment=production
+# silently succeeds while writing nothing but the auto-generated
+# VERCEL_OIDC_TOKEN. Confirmed against this exact project with `vercel env
+# ls --project corax`: SUPABASE_ACCESS_TOKEN exists, scoped Preview+Production.
+vercel env pull $envPath --environment=production --project corax --yes *> $null
 if ($LASTEXITCODE -ne 0) {
     Say "  [!!] vercel env pull failed. Make sure your account has access to the `"corax`" project." Red
-    Say "       Re-run manually: vercel env pull `"$envPath`" --project corax --yes" Gray
+    Say "       Re-run manually: vercel env pull `"$envPath`" --environment=production --project corax --yes" Gray
     exit 1
 }
 Say "  [OK] Team env vars refreshed: $envPath" Green

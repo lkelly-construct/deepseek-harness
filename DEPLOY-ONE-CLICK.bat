@@ -85,7 +85,21 @@ REM ---------------- Step 2: get the code ----------------
 echo.
 echo [2/7] Getting the code...
 if exist "%INSTALL_DIR%\.git" (
-    echo   [OK] Repository already present
+    REM An existing checkout otherwise never updates just by re-running this
+    REM script -- everyone re-running it would stay frozen on whatever
+    REM commit they first cloned, silently missing every fix since. --ff-only
+    REM is the safe direction here: it never discards local commits or
+    REM uncommitted changes, it just no-ops with a message when the checkout
+    REM has diverged, and setup continues with whatever is on disk either way.
+    echo   [OK] Repository already present -- checking for updates...
+    cd /d "%INSTALL_DIR%"
+    call git pull --ff-only
+    if errorlevel 1 (
+        echo   [--] Could not fast-forward automatically ^(local changes or diverged history^).
+        echo        Continuing with the existing checkout as-is.
+    ) else (
+        echo   [OK] Repository updated
+    )
 ) else (
     echo   [..] Cloning...
     call git clone "%REPO_URL%" "%INSTALL_DIR%"

@@ -184,7 +184,7 @@ describe('registration', () => {
 
   it('unregisters everything on fiber disposal (HMR safety)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(FakeFs)
     await ctx.plugin(FsPolicy)

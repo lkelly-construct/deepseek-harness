@@ -30,14 +30,14 @@
 
 # The preset's own persona, shadowing the deployment default for this agent.
 # `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# The conciseness policy that used to live here is now the harness-owned
+# `harness:response-style` section (packages/core/system-prompt), so every
+# preset and profile gets it -- not just whichever one happened to carry it.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
     text: >-
       You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
-      Be concise. Skip preamble, restating the task, and summarizing what you just did unless
-      asked. Prefer short direct answers over exhaustive explanations; expand only when the
-      task is genuinely complex or the user asks for detail.
       Whenever you start a UI dev server for a web app you are building, always call
       render_app_url with its http://localhost:<port> URL so the running app surfaces as an
       app-preview card automatically; re-call it after user-visible changes.

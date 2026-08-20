@@ -130,6 +130,19 @@ export const PERSONA_SECTION = 'deployment:persona'
 /** Prompt order of the persona slot; the first section a model reads. */
 export const PERSONA_ORDER = 0
 
+/**
+ * Harness-owned conciseness policy. Concrete output rules, not a vague
+ * exhortation to "be concise" — a model given only the latter tends to
+ * pad with hedges and restatement rather than actually shorten anything.
+ */
+const RESPONSE_STYLE_TEXT = [
+  'Minimize output tokens while staying correct and complete. Answer directly;',
+  'skip preamble ("Sure, I can help with that"), restating the request, and',
+  'summarizing what you just did unless asked. A one-line or one-word answer is',
+  'preferable to a paragraph when it fully answers the question. Expand only',
+  'when the task is genuinely complex or the user asks for detail.',
+].join(' ')
+
 /** Valid variable names: how they are written between the braces. */
 const VARIABLE_NAME = /^[a-z][a-z0-9_]*$/
 
@@ -177,6 +190,28 @@ function orderTools(tools: ToolSchema[], toolOrder: string[] | undefined, knownN
     name === TOOL_ORDER_REST ? rest : tools.filter(tool => tool.name === name))
 }
 
+const DATE_FORMATTERS = new Map<string | undefined, Intl.DateTimeFormat>()
+
+/**
+ * Today's date in the given IANA zone (or the host's local zone when
+ * omitted), e.g. "Thursday, August 20, 2026". Formatters are cached per zone:
+ * this runs once per assembly, and `Intl.DateTimeFormat` construction is not
+ * cheap.
+ * @param timeZone - IANA zone name, or `undefined` for the host's local zone.
+ * @returns the formatted date.
+ */
+function formatCurrentDate(timeZone: string | undefined): string {
+  let formatter = DATE_FORMATTERS.get(timeZone)
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      ...timeZone === undefined ? {} : { timeZone },
+    })
+    DATE_FORMATTERS.set(timeZone, formatter)
+  }
+  return formatter.format(new Date())
+}
+
 /** Lexicographic (code-unit) name comparison — locale-independent, so the order is identical on every machine. */
 function compareToolNames(a: ToolSchema, b: ToolSchema): number {
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
@@ -186,6 +221,24 @@ function compareToolNames(a: ToolSchema, b: ToolSchema): number {
 export interface Config {
   /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
+  /**
+   * Include today's date before the deployment persona (default true). Renders
+   * once per assembly from the current wall clock, so the prefix changes at
+   * most once a day — a durable per-step timestamp message belongs to a
+   * separate history-append mechanism, not this section.
+   */
+  includeCurrentDate?: boolean
+  /** IANA zone {@link includeCurrentDate} renders in; omitted uses the host's local zone. */
+  timeZone?: string
+  /**
+   * Include the harness-owned response-style guidance before the deployment
+   * persona (default true). This used to live in preset-authored persona
+   * text, which meant only the preset that happened to carry it enforced any
+   * conciseness policy at all — every other preset and profile had none. A
+   * harness-owned section means every deployment gets it regardless of what
+   * persona text it configures.
+   */
+  includeResponseStyle?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
   includeRuntimeContext?: boolean
   /**
@@ -338,6 +391,9 @@ class PromptLayer implements ScopeLayer {
 export class SystemPrompt extends Service {
   static Config: z<Config> = z.object({
     includeHarnessIdentity: z.boolean().default(true),
+    includeCurrentDate: z.boolean().default(true),
+    timeZone: z.string(),
+    includeResponseStyle: z.boolean().default(true),
     includeRuntimeContext: z.boolean().default(true),
     persona: z.string().default(''),
     // Preserve omission because an explicit empty order lacks the rest marker.
@@ -359,6 +415,21 @@ export class SystemPrompt extends Service {
         name: 'harness:identity',
         order: -100,
         text: 'You are an AI agent powered by DeepSeek Harness.',
+      })
+    }
+    if (config.includeCurrentDate ?? true) {
+      const timeZone = config.timeZone
+      this.section({
+        name: 'harness:date',
+        order: -97,
+        text: () => `Today's date: ${formatCurrentDate(timeZone)}.`,
+      })
+    }
+    if (config.includeResponseStyle ?? true) {
+      this.section({
+        name: 'harness:response-style',
+        order: -99,
+        text: RESPONSE_STYLE_TEXT,
       })
     }
     this.section({

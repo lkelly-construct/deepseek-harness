@@ -21,7 +21,7 @@ describe('ui-deliverables node plugin', () => {
 
     const section = (await ctx.systemPrompt.assemble()).sections
       .find(entry => entry.name === 'ui:deliverable-file-references')
-    expect(section?.text).toMatchInlineSnapshot('"When you successfully create or modify files, mention the primary outputs in your final response. To make those and any other changed-file references clickable in Web, format them as Markdown inline code using the exact file-tool path, or a basename when unique among the files changed in that turn."')
+    expect(section?.text).toMatchInlineSnapshot('"When your final response mentions a file you created or modified, format it as Markdown inline code using the exact file-tool path, or a basename when unique among the files changed in that turn, so Web renders it clickable."')
 
     await mounted.dispose()
     expect((await ctx.systemPrompt.assemble()).sections

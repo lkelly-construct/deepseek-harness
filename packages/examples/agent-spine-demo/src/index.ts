@@ -69,10 +69,12 @@ export interface GoalConfig {
 /**
  * Bundle config: each field forwarded verbatim to the child that owns it —
  * `agents` to the agent loop (an app that pre-creates no agents, like the ACP
- * bridge, simply omits it), `includeHarnessIdentity`, `includeRuntimeContext`,
- * `persona`, and `toolOrder` to the system-prompt plugin (the fixed opener,
- * dynamic-context policy, deployment persona, and explicit model-facing tool
- * order), the `tools` object to the tool registry (its presentation `mode`),
+ * bridge, simply omits it), `includeHarnessIdentity`, `includeCurrentDate`,
+ * `timeZone`, `includeResponseStyle`, `includeRuntimeContext`, `persona`, and
+ * `toolOrder` to the system-prompt plugin (the fixed opener, today's date,
+ * the harness-owned conciseness policy, dynamic-context policy, deployment
+ * persona, and explicit model-facing tool order), the `tools` object to the
+ * tool registry (its presentation `mode`),
  * `dshHome` to bash environment and local skill discovery, `sessionTitle` to
  * the fallback title service, `skills` to the
  * skill registry/local provider/tool consumer, `workspaceContext` to the
@@ -96,6 +98,12 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
+  /** Whether the system prompt includes today's date (default true). */
+  includeCurrentDate?: SystemPromptConfig['includeCurrentDate']
+  /** IANA zone the date section renders in; omitted uses the host's local zone. */
+  timeZone?: SystemPromptConfig['timeZone']
+  /** Whether the system prompt includes the harness-owned response-style guidance (default true). */
+  includeResponseStyle?: SystemPromptConfig['includeResponseStyle']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
   includeRuntimeContext?: SystemPromptConfig['includeRuntimeContext']
   /** The deployment persona (see dsh-system-prompt's `Config`). */
@@ -183,6 +191,9 @@ export function pickSpineConfig(config: Omit<Config, 'agents'>): Omit<Config, 'a
   return {
     ...config.maxParallelToolCalls !== undefined ? { maxParallelToolCalls: config.maxParallelToolCalls } : {},
     ...config.includeHarnessIdentity !== undefined ? { includeHarnessIdentity: config.includeHarnessIdentity } : {},
+    ...config.includeCurrentDate !== undefined ? { includeCurrentDate: config.includeCurrentDate } : {},
+    ...config.timeZone !== undefined ? { timeZone: config.timeZone } : {},
+    ...config.includeResponseStyle !== undefined ? { includeResponseStyle: config.includeResponseStyle } : {},
     ...config.includeRuntimeContext !== undefined ? { includeRuntimeContext: config.includeRuntimeContext } : {},
     ...config.persona !== undefined ? { persona: config.persona } : {},
     ...config.toolOrder !== undefined ? { toolOrder: config.toolOrder } : {},
@@ -224,9 +235,12 @@ export function apply(ctx: Context, config: Config): void {
   // Owner schemas resolve defaults; forward toolOrder only when explicitly set.
   ctx.plugin(SystemPrompt, {
     includeHarnessIdentity: config.includeHarnessIdentity ?? true,
+    includeCurrentDate: config.includeCurrentDate ?? true,
+    includeResponseStyle: config.includeResponseStyle ?? true,
     includeRuntimeContext: config.includeRuntimeContext ?? true,
     persona: config.persona ?? '',
     ...config.toolOrder !== undefined ? { toolOrder: config.toolOrder } : {},
+    ...config.timeZone !== undefined ? { timeZone: config.timeZone } : {},
   })
   ctx.plugin(ToolRuntime, config.tools ?? {})
   const skillsEnabled = config.skills?.enabled ?? true

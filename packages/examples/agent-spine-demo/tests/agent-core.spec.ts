@@ -712,6 +712,8 @@ describe('dsh-agent-spine-demo bundle', () => {
   it('can omit the bundled bash tool and Harness identity for a compatibility deployment', async () => {
     const ctx = await mount({
       includeHarnessIdentity: false,
+      includeCurrentDate: false,
+      includeResponseStyle: false,
       includeRuntimeContext: false,
       persona: 'You are a helpful software engineer assistant.',
       workspaceContext: false,

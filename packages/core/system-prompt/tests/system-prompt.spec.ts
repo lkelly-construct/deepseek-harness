@@ -18,7 +18,7 @@ describe('SystemPrompt', () => {
   describe('built-in sections', () => {
     it('registers the harness identity and the configured deployment persona', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt, { persona: 'You are DeepSeek Harness.' })
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false, persona: 'You are DeepSeek Harness.' })
 
       const assembly = await ctx.systemPrompt.assemble()
       expect(assembly.sections.map(s => s.name)).toEqual([
@@ -31,9 +31,54 @@ describe('SystemPrompt', () => {
         .toThrow('prompt section "deployment:persona" is already registered')
     })
 
+    it("renders today's date before the persona, and can omit it", async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt, {
+        persona: 'You are DeepSeek Harness.',
+        timeZone: 'UTC',
+        includeResponseStyle: false,
+      })
+
+      const assembly = await ctx.systemPrompt.assemble()
+      expect(assembly.sections.map(s => s.name)).toEqual([
+        'harness:identity',
+        'harness:date',
+        'deployment:persona',
+      ])
+      const dateSection = assembly.sections.find(s => s.name === 'harness:date')
+      expect(dateSection?.text).toMatch(/^Today's date: \w+, \w+ \d{1,2}, \d{4}\.$/)
+
+      const disabled = new Context()
+      await disabled.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
+      expect((await disabled.systemPrompt.assemble()).sections.map(s => s.name))
+        .toEqual(['harness:identity', 'deployment:persona'])
+    })
+
+    it('renders the harness-owned response-style guidance before the persona, and can omit it', async () => {
+      const ctx = new Context()
+      await ctx.plugin(SystemPrompt, {
+        persona: 'You are DeepSeek Harness.',
+        includeCurrentDate: false,
+      })
+
+      const assembly = await ctx.systemPrompt.assemble()
+      expect(assembly.sections.map(s => s.name)).toEqual([
+        'harness:identity',
+        'harness:response-style',
+        'deployment:persona',
+      ])
+      const styleSection = assembly.sections.find(s => s.name === 'harness:response-style')
+      expect(styleSection?.text).toMatch(/Minimize output tokens/)
+
+      const disabled = new Context()
+      await disabled.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
+      expect((await disabled.systemPrompt.assemble()).sections.map(s => s.name))
+        .toEqual(['harness:identity', 'deployment:persona'])
+    })
+
     it('renders no persona section for a persona-less deployment (empty default)', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(IDENTITY)
     })
 
@@ -41,6 +86,7 @@ describe('SystemPrompt', () => {
       const ctx = new Context()
       await ctx.plugin(SystemPrompt, {
         includeHarnessIdentity: false,
+        includeCurrentDate: false, includeResponseStyle: false,
         persona: 'You are a helpful software engineer assistant.',
       })
 
@@ -51,7 +97,7 @@ describe('SystemPrompt', () => {
 
     it('can suppress runtime context without evaluating providers or accepting waterfall additions', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt, { includeRuntimeContext: false })
+      await ctx.plugin(SystemPrompt, { includeRuntimeContext: false, includeCurrentDate: false, includeResponseStyle: false })
       let providerCalls = 0
       ctx.systemPrompt.context({
         name: 'policy',
@@ -72,14 +118,14 @@ describe('SystemPrompt', () => {
       // ctx.plugin validates + defaults the config first; a direct construction
       // skips the schema, so the ctor's `?? ''` narrowing is what fires.
       const ctx = new Context()
-      const service = new SystemPrompt(ctx, {})
+      const service = new SystemPrompt(ctx, { includeCurrentDate: false, includeResponseStyle: false })
       expect(renderPrompt(await service.assemble())).toBe(IDENTITY)
     })
   })
 
   it('assembles sections in order with context-resolved text and collected tools', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt, { persona: 'You are DeepSeek Harness.' })
+    await ctx.plugin(SystemPrompt, { persona: 'You are DeepSeek Harness.', includeCurrentDate: false, includeResponseStyle: false })
 
     ctx.systemPrompt.section({ name: 'cwd', order: 20, text: () => 'cwd: /tmp' })
     ctx.systemPrompt.section({ name: 'rules', order: 10, text: 'Be precise.' })
@@ -104,7 +150,7 @@ describe('SystemPrompt', () => {
     // The context is HOW per-agent sections work (the loop passes { agent });
     // this spec stays agent-agnostic and smuggles a marker through a plain field.
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     let calls = 0
     ctx.systemPrompt.section({
       name: 'dynamic',
@@ -118,7 +164,7 @@ describe('SystemPrompt', () => {
 
   it('removes contributions when the contributing fiber is disposed (HMR safety)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     const fiber = await ctx.plugin(Object.assign((inner: Context) => {
       inner.systemPrompt.section({ name: 'scoped', order: 0, text: 'scoped section' })
@@ -143,7 +189,7 @@ describe('SystemPrompt', () => {
 
   it('rejects a duplicate section name (a double-loaded plugin must fail, not double its text)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.section({ name: 'dup', order: 0, text: 'first' })
     expect(() => ctx.systemPrompt.section({ name: 'dup', order: 1, text: 'second' }))
       .toThrow('prompt section "dup" is already registered')
@@ -154,7 +200,7 @@ describe('SystemPrompt', () => {
 
   it('rejects a non-finite section order', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     expect(() => ctx.systemPrompt.section({ name: 'bad-order', order: Number.NaN, text: 'x' }))
       .toThrow('order must be a finite number')
     expect(contributed(await ctx.systemPrompt.assemble())).toEqual([])
@@ -162,7 +208,7 @@ describe('SystemPrompt', () => {
 
   it('rejects duplicate and non-finite context registrations without leaking', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.context({ name: 'policy', order: 1, text: 'first' })
     expect(() => ctx.systemPrompt.context({ name: 'policy', order: 2, text: 'second' }))
       .toThrow('prompt context "policy" is already registered')
@@ -173,7 +219,7 @@ describe('SystemPrompt', () => {
 
   it('rolls back a section when a system-prompt/change listener throws (P1-1)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     // Throw on the first emit only. Note the rollback path itself emits
     // system-prompt/change, so a multi-shot guard would also fire on rollback;
@@ -194,7 +240,7 @@ describe('SystemPrompt', () => {
 
   it('rolls back a tool provider when a system-prompt/change listener throws (P1-1)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     let threw = false
     const off = ctx.on('system-prompt/change', () => {
@@ -211,7 +257,7 @@ describe('SystemPrompt', () => {
 
   it('snapshots tool-provider membership before evaluating an assembly', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     let added = false
     ctx.systemPrompt.tools(() => {
       if (!added) {
@@ -229,7 +275,7 @@ describe('SystemPrompt', () => {
 
   it('rolls back a variable when a system-prompt/change listener throws (P1-1)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     let threw = false
     const off = ctx.on('system-prompt/change', () => {
@@ -246,7 +292,7 @@ describe('SystemPrompt', () => {
 
   it('composes multiple system-prompt/assemble waterfall listeners in order, with the context', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.section({ name: 'base', order: 0, text: 'base' })
 
     // Listener A appends a section, then delegates.
@@ -272,7 +318,7 @@ describe('SystemPrompt', () => {
 
   it('lets a waterfall listener short-circuit by not calling next()', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.section({ name: 'real', order: 0, text: 'real' })
 
     ctx.on('system-prompt/assemble', async () => {
@@ -285,7 +331,7 @@ describe('SystemPrompt', () => {
 
   it('restores one complete section after the assembly waterfall', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.section({ name: 'complete', order: 10, text: 'Exact prompt.', complete: true })
     ctx.systemPrompt.section({ name: 'extra', order: 20, text: 'extra' })
     ctx.on('system-prompt/assemble', async (assembly, _context, next) => {
@@ -303,7 +349,7 @@ describe('SystemPrompt', () => {
 
   it('rejects multiple effective complete sections', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.section({ name: 'first', order: 10, text: 'first', complete: true })
     ctx.systemPrompt.section({ name: 'second', order: 20, text: 'second', complete: true })
 
@@ -313,7 +359,7 @@ describe('SystemPrompt', () => {
 
   it('assembles snapshots so one-step mutations do not leak into future assemblies', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.section({ name: 'base', order: 0, text: 'base' })
     ctx.systemPrompt.tools(() => ({ schemas: [{ name: 't', description: 'tool', parameters: { type: 'object', properties: {} } }] }))
 
@@ -347,7 +393,7 @@ describe('SystemPrompt', () => {
 
   it('filters empty context, interpolates variables, and returns empty without active context', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     ctx.systemPrompt.context({ name: 'empty', order: 0, text: '' })
     expect(renderContextSnapshot(await ctx.systemPrompt.assemble())).toBe('')
     ctx.systemPrompt.variable('mode', () => 'read-only')
@@ -367,7 +413,7 @@ describe('SystemPrompt', () => {
 
   it('emits system-prompt/change when a tool provider is registered and disposed', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     let changeCount = 0
     ctx.on('system-prompt/change', () => void changeCount++)
@@ -383,7 +429,7 @@ describe('SystemPrompt', () => {
 
   it('emits system-prompt/change when a context is registered and disposed', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
     let changeCount = 0
     ctx.on('system-prompt/change', () => void changeCount++)
     const dispose = ctx.systemPrompt.context({ name: 'policy', order: 0, text: 'current' })
@@ -394,7 +440,7 @@ describe('SystemPrompt', () => {
 
   it('cleans up tool providers on fiber dispose', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     const fiber = await ctx.plugin(Object.assign((inner: Context) => {
       inner.systemPrompt.tools(() => ({ schemas: [{ name: 'fiber-tool', description: '', parameters: {} }] }))
@@ -407,7 +453,7 @@ describe('SystemPrompt', () => {
 
   it('removes section when returned disposer is called directly', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     const dispose = ctx.systemPrompt.section({ name: 'direct', order: 0, text: 'direct section' })
     expect(contributed(await ctx.systemPrompt.assemble())).toHaveLength(1)
@@ -418,7 +464,7 @@ describe('SystemPrompt', () => {
 
   it('removes tool provider when returned disposer is called directly', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
 
     const dispose = ctx.systemPrompt.tools(() => ({ schemas: [{ name: 'direct-tool', description: '', parameters: {} }] }))
     expect((await ctx.systemPrompt.assemble()).tools).toHaveLength(1)
@@ -430,7 +476,7 @@ describe('SystemPrompt', () => {
   describe('prompt variables', () => {
     it('resolves each variable against the assemble context and emits change on register/unregister', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       let changeCount = 0
       ctx.on('system-prompt/change', () => void changeCount++)
 
@@ -448,7 +494,7 @@ describe('SystemPrompt', () => {
 
     it('live-iterates variables registered by an earlier provider', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       let added = false
       ctx.systemPrompt.variable('first', () => {
         if (!added) {
@@ -466,7 +512,7 @@ describe('SystemPrompt', () => {
 
     it('rejects a duplicate variable name and an unreferenceable name', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       ctx.systemPrompt.variable('model', () => 'm1')
       expect(() => ctx.systemPrompt.variable('model', () => 'm2'))
         .toThrow('prompt variable "model" is already registered')
@@ -478,7 +524,7 @@ describe('SystemPrompt', () => {
 
     it('interpolates {{name}} references in section text at render — the persona included', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt, { persona: 'You run on {{model}} in {{cwd}}.' })
+      await ctx.plugin(SystemPrompt, { persona: 'You run on {{model}} in {{cwd}}.', includeCurrentDate: false, includeResponseStyle: false })
       ctx.systemPrompt.variable('model', () => 'deepseek-v4')
       ctx.systemPrompt.variable('cwd', () => '/work')
 
@@ -487,7 +533,7 @@ describe('SystemPrompt', () => {
 
     it('lets a waterfall listener add or override variables before render', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       ctx.systemPrompt.section({ name: 's', order: 0, text: '{{extra}}' })
       ctx.on('system-prompt/assemble', async (assembly: PromptAssembly, _context, next) => {
         assembly.variables['extra'] = 'from-waterfall'
@@ -498,7 +544,7 @@ describe('SystemPrompt', () => {
 
     it('throws on a reference to an unregistered variable, listing what exists', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       ctx.systemPrompt.section({ name: 'persona', order: 0, text: 'on {{modle}}' })
       ctx.systemPrompt.variable('model', () => 'm')
       await expect(async () => renderPrompt(await ctx.systemPrompt.assemble()))
@@ -563,7 +609,7 @@ describe('SystemPrompt', () => {
 
     it('a variable NAMED like a prototype property works once actually registered', async () => {
       const ctx = new Context()
-      await ctx.plugin(SystemPrompt)
+      await ctx.plugin(SystemPrompt, { includeCurrentDate: false, includeResponseStyle: false })
       ctx.systemPrompt.section({ name: 's', order: 0, text: '{{constructor}}' })
       ctx.systemPrompt.variable('constructor', () => 'own-value')
       expect(renderPrompt(await ctx.systemPrompt.assemble())).toBe(`${IDENTITY}\n\nown-value`)

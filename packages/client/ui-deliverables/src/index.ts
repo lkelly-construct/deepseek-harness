@@ -11,9 +11,14 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 /** Services required for the model guidance paired with the browser renderer. */
 export const inject = ['systemPrompt']
 
-/** Stable final-response guidance owned by the matching renderer. */
-const FILE_REFERENCE_PROMPT = 'When you successfully create or modify files, mention the primary outputs in your final response. '
-  + 'To make those and any other changed-file references clickable in Web, format them as Markdown inline code using the exact file-tool path, or a basename when unique among the files changed in that turn.'
+/**
+ * Stable final-response guidance owned by the matching renderer. Formatting
+ * only -- it must not require mentioning file outputs, which would
+ * contradict the harness-owned conciseness policy ("skip summarizing what
+ * you just did unless asked").
+ */
+const FILE_REFERENCE_PROMPT = 'When your final response mentions a file you created or modified, '
+  + 'format it as Markdown inline code using the exact file-tool path, or a basename when unique among the files changed in that turn, so Web renders it clickable.'
 
 /**
  * Register model guidance for the file-reference renderer shipped by this package.

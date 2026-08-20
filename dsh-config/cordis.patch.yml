@@ -1,9 +1,13 @@
 # DSH profile patch — applied on top of the standard web profile bundles.
-# Adds the time-context plugin so the agent always knows the current date/time.
-# Change timeZone to match your local IANA zone if you're not in Central Time.
+#
+# Sets the IANA zone the `harness:date` system-prompt section renders today's
+# date in. Change to match your local zone if you're not in Central Time.
 # Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
-- insert:
-    - id: time-context
-      name: '@deepseek-ai/dsh-time-context'
-      config:
-        timeZone: America/Chicago
+#
+# This used to mount `@deepseek-ai/dsh-time-context`, which appended a fresh
+# timestamp message on EVERY step of every turn (~230 bytes each, unbounded
+# growth over a session — see docs/improvement-plan.md). A date that changes
+# at most once a day belongs in the system prompt, not repeated in history.
+- id: system-prompt
+  config:
+    timeZone: America/Chicago

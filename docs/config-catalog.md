@@ -210,10 +210,12 @@ Source: [`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/ag
 /**
  * Bundle config: each field forwarded verbatim to the child that owns it —
  * `agents` to the agent loop (an app that pre-creates no agents, like the ACP
- * bridge, simply omits it), `includeHarnessIdentity`, `includeRuntimeContext`,
- * `persona`, and `toolOrder` to the system-prompt plugin (the fixed opener,
- * dynamic-context policy, deployment persona, and explicit model-facing tool
- * order), the `tools` object to the tool registry (its presentation `mode`),
+ * bridge, simply omits it), `includeHarnessIdentity`, `includeCurrentDate`,
+ * `timeZone`, `includeResponseStyle`, `includeRuntimeContext`, `persona`, and
+ * `toolOrder` to the system-prompt plugin (the fixed opener, today's date,
+ * the harness-owned conciseness policy, dynamic-context policy, deployment
+ * persona, and explicit model-facing tool order), the `tools` object to the
+ * tool registry (its presentation `mode`),
  * `dshHome` to bash environment and local skill discovery, `sessionTitle` to
  * the fallback title service, `skills` to the
  * skill registry/local provider/tool consumer, `workspaceContext` to the
@@ -237,6 +239,12 @@ export interface Config {
   maxParallelToolCalls?: AgentLoopConfig['maxParallelToolCalls']
   /** Whether the system prompt includes the fixed Harness identity (default true). */
   includeHarnessIdentity?: SystemPromptConfig['includeHarnessIdentity']
+  /** Whether the system prompt includes today's date (default true). */
+  includeCurrentDate?: SystemPromptConfig['includeCurrentDate']
+  /** IANA zone the date section renders in; omitted uses the host's local zone. */
+  timeZone?: SystemPromptConfig['timeZone']
+  /** Whether the system prompt includes the harness-owned response-style guidance (default true). */
+  includeResponseStyle?: SystemPromptConfig['includeResponseStyle']
   /** Whether model history includes dynamic runtime-context snapshots (default true). */
   includeRuntimeContext?: SystemPromptConfig['includeRuntimeContext']
   /** The deployment persona (see dsh-system-prompt's `Config`). */
@@ -292,7 +300,7 @@ export interface GoalConfig {
 
 Depends on: [`AgentLoopConfig`](#deepseek-aidsh-agent-loop) · [`GoalDomainConfig`](#deepseek-aidsh-goal) · [`InvariantConfig`](#deepseek-aidsh-invariants) · [`JobsConfig`](#deepseek-aidsh-jobs-local) · [`SessionTitleConfig`](#deepseek-aidsh-session-title) · [`SkillFileSystem`](../packages/skill/skill-filesystem/src/index.ts) · [`SkillRegistryConfig`](#deepseek-aidsh-skill) · [`SystemPromptConfig`](#deepseek-aidsh-system-prompt) · [`toolBash`](../packages/shell/tool-bash/src/index.ts) · [`toolGoal`](../packages/goal/tool-goal/src/index.ts) · [`toolJobs`](../packages/jobs/tool-jobs/src/index.ts) · [`ToolsConfig`](#deepseek-aidsh-tools) · [`toolSkill`](../packages/skill/tool-skill/src/index.ts) · [`workspaceContext`](../packages/context/agent-instructions/src/index.ts)
 
-Source: [`packages/examples/agent-spine-demo/src/index.ts:92`](../packages/examples/agent-spine-demo/src/index.ts)
+Source: [`packages/examples/agent-spine-demo/src/index.ts:94`](../packages/examples/agent-spine-demo/src/index.ts)
 
 <a id="deepseek-aidsh-agent-tool-presentation"></a>
 
@@ -2250,6 +2258,24 @@ Source: [`packages/e2b/subprocess-e2b/src/index.ts:25`](../packages/e2b/subproce
 export interface Config {
   /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
   includeHarnessIdentity?: boolean
+  /**
+   * Include today's date before the deployment persona (default true). Renders
+   * once per assembly from the current wall clock, so the prefix changes at
+   * most once a day — a durable per-step timestamp message belongs to a
+   * separate history-append mechanism, not this section.
+   */
+  includeCurrentDate?: boolean
+  /** IANA zone {@link includeCurrentDate} renders in; omitted uses the host's local zone. */
+  timeZone?: string
+  /**
+   * Include the harness-owned response-style guidance before the deployment
+   * persona (default true). This used to live in preset-authored persona
+   * text, which meant only the preset that happened to carry it enforced any
+   * conciseness policy at all — every other preset and profile had none. A
+   * harness-owned section means every deployment gets it regardless of what
+   * persona text it configures.
+   */
+  includeResponseStyle?: boolean
   /** Include dynamic runtime-context snapshots in model history (default true). */
   includeRuntimeContext?: boolean
   /**
@@ -2266,7 +2292,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:186`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:221`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 

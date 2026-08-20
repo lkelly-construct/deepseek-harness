@@ -825,6 +825,10 @@
       "project": [
         "src/**/*.ts"
       ]
+    },
+    "packages/client/ui-file-explorer": {
+      "entry": [],
+      "project": []
     }
   }
 }

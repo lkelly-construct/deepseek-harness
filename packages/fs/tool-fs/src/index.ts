@@ -1,7 +1,9 @@
 /**
- * Model-facing read, read_image, write, and edit tools over `ctx.fs`. This package owns schemas, validation,
- * read windows, formatting, and observation events, never a concrete provider. An optional
- * event policy supplies mutation guards; without one the tools use unconditional provider calls.
+ * Model-facing read, read_image, write, and edit tools over `ctx.fs`, plus tolerant
+ * `read_file`/`write_file`/`edit_file` name aliases for models that guess those names.
+ * This package owns schemas, validation, read windows, formatting, and observation
+ * events, never a concrete provider. An optional event policy supplies mutation
+ * guards; without one the tools use unconditional provider calls.
  * @module @deepseek-ai/dsh-tool-fs
  */
 
@@ -14,6 +16,7 @@ import { applyEditTool } from './edit.ts'
 import { applyReadImageTool } from './read-image.ts'
 import { READ_MAX_BYTES, READ_MAX_LINE_LENGTH } from './read-render.ts'
 import { FsSandboxController } from './sandbox.ts'
+import { applyEditFileAlias, applyReadFileAlias, applyWriteFileAlias } from './aliases.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-fs'
@@ -58,12 +61,13 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveInteger('readMaxLineLength', resolved.readMaxLineLength)
   assertPositiveInteger('readMaxBytes', resolved.readMaxBytes)
   assertPositiveInteger('readStreamMinSize', resolved.readStreamMinSize)
-  applyReadTool(ctx, {
+  const readCaps = {
     limit: resolved.readLimit,
     maxLineLength: resolved.readMaxLineLength,
     maxBytes: resolved.readMaxBytes,
     streamMinSize: resolved.readStreamMinSize,
-  })
+  }
+  applyReadTool(ctx, readCaps)
   // read_image is composition-conditional: without a mounted attachment store
   // the deployment cannot durably commit image bytes, so the tool never
   // registers; the execute body keeps a defensive re-check for direct callers.
@@ -76,4 +80,10 @@ export function apply(ctx: Context, config: Config): void {
   const sandbox = new FsSandboxController(ctx)
   applyWriteTool(ctx, sandbox)
   applyEditTool(ctx, sandbox)
+  // Tolerant name aliases: some models guess `read_file`/`write_file`/`edit_file`
+  // instead of the declared `read`/`write`/`edit`. Registering the guessed names
+  // avoids a bare `unknown tool` round trip for those models.
+  applyReadFileAlias(ctx, readCaps)
+  applyWriteFileAlias(ctx, sandbox)
+  applyEditFileAlias(ctx, sandbox)
 }

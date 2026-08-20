@@ -37,6 +37,7 @@ const EXPECTED_TOOLS = [
   'bash',
   'create_goal',
   'edit',
+  'edit_file',
   'exit_plan_mode',
   'get_goal',
   'interrupt_agent',
@@ -46,6 +47,7 @@ const EXPECTED_TOOLS = [
   'list_agents',
   'ralph',
   'read',
+  'read_file',
   'read_image',
   'send_message',
   'skill',
@@ -56,6 +58,7 @@ const EXPECTED_TOOLS = [
   'web_search',
   'workflow',
   'write',
+  'write_file',
 ]
 
 /**

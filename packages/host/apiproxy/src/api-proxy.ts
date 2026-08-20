@@ -1234,10 +1234,27 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   // composition, and the header is written once at creation. Reading the
   // header here would silently undo the switch on the next restart and
   // restore that history under the old tool set.
+  //
+  // A recorded preset can stop existing (the deployment deleted or renamed
+  // it after the session ran), and cold resume is not a place a caller can
+  // recover from a thrown UnknownPresetError -- unlike an explicit create or
+  // switch, there is no request to refuse. Fall back to the roster default
+  // instead of failing every read of that session forever.
   const agentFor = createApiRemoteAgentResolver(ctx, {
     agentOptions,
-    setup: async ({ meta, events }) =>
-      (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+    setup: async ({ meta, events }) => {
+      const recordedPreset = resolveSessionPreset({ header: meta, events })
+      try {
+        return (await composeAgent(recordedPreset)).setup
+      } catch (error) {
+        if (!(error instanceof UnknownPresetError) || recordedPreset === undefined) throw error
+        ctx.logger.warn(
+          `agent-presets: session recorded preset "${recordedPreset}", which no longer exists `
+          + `(available: ${error.available.join(', ') || 'none'}); resuming on the roster default instead`,
+        )
+        return (await composeAgent(undefined)).setup
+      }
+    },
   })
 
   /** Send one transient frame to every connected mux consumer. */

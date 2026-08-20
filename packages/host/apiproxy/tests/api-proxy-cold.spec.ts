@@ -4,13 +4,21 @@
  * isolation, and prompt failure mapping.
  */
 
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
+import Include from '@deepseek-ai/cordis-plugin-include'
 import SessionStore from '@deepseek-ai/dsh-session'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import AgentPresets from '@deepseek-ai/dsh-agent-presets'
+import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { TypertLookupFailure } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import { createUserMessage, MessageId } from '@deepseek-ai/dsh-llm'
@@ -797,5 +805,72 @@ describe('sessions.prompt synchronous rejection', () => {
         details: { reason: 'use subagent delivery for this child session' },
       })
     }
+  })
+})
+
+describe('cold resume with a deleted agent preset', () => {
+  /** A one-preset roster (`standard`, no rows) rooted at a fresh temp directory. */
+  function rosterRoot(): string {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-cold-presets-'))
+    mkdirSync(join(root, 'standard'))
+    writeFileSync(join(root, 'standard', 'agent.cordis.yml'), '[]\n')
+    return root
+  }
+
+  it('falls back to the roster default instead of failing resume forever', async () => {
+    const root = rosterRoot()
+    const ctx = new Context()
+    ctx.baseUrl = pathToFileURL(root).href + '/'
+    await ctx.plugin(Loader)
+    ctx.loader.builtins.include = Include
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SystemPrompt, { persona: '' })
+    await ctx.plugin(UserQuestionService)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(AgentPresets, {
+      default: 'standard',
+      roots: [{ path: root, trust: 'system' }],
+      includeUserRoot: false,
+    })
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+
+    const sessionId = sid('session-deleted-preset')
+    // The session's log recorded a preset that has since been deleted from
+    // the roster -- exactly what a session running one of the five presets
+    // collapsed into `standard` hits once its own preset is gone (see
+    // docs/improvement-plan.md).
+    const meta: SessionHeader = header('session-deleted-preset', 1000, { agentPreset: 'deleted-preset' })
+    const stored: StoredPrefix<never> = {
+      meta,
+      events: [],
+      revision: SessionPersistenceRevision('deleted-preset-test:1'),
+    }
+    const backend: PersistenceBackend<never> = {
+      name: 'deleted-preset-test',
+      loadStored: id => Promise.resolve(id === sessionId ? structuredClone(stored) : undefined),
+      readStoredRevision: id => Promise.resolve(
+        id === sessionId ? SessionPersistenceRevision('deleted-preset-test:1') : undefined,
+      ),
+      appendBatch: () => Promise.resolve(),
+      commitRepair: () => Promise.resolve(),
+      list: () => Promise.resolve([structuredClone(meta)]),
+    }
+    const coordinator = new PersistenceCoordinator(ctx, backend)
+    ctx.provide('sessionPersistence', {
+      list: (signal?: AbortSignal) => backend.list(signal),
+      inspect: (id: SessionId, signal?: AbortSignal) => coordinator.inspect(id, signal),
+      locate: () => undefined,
+      prepare: (id: SessionId, signal?: AbortSignal) => coordinator.prepare(id, signal),
+    } as never)
+    const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+
+    const response = await api.sessions.models(request({ sessionId }))
+    expect(response.result.ok).toBe(true)
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(
+      'session recorded preset "deleted-preset", which no longer exists',
+    ))
   })
 })

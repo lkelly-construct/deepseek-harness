@@ -73,6 +73,7 @@ interface PackageManifest {
     | {
       types?: string
       default?: string
+      browser?: string
     }
     | null
     | undefined
@@ -164,7 +165,7 @@ function expectedDshPackageFiles(manifest: PackageManifest): readonly string[] {
     // (single-artifact ruling: dist/ retired, ./client resolves lib/client.js).
     // Keyed on the artifact path, not the subpath name: apiproxy's ./client is
     // a browser-safe source channel, not a bundle.
-    ...exportDefault(manifest, './client') === './lib/client.js' ? ['lib/client.js'] : [],
+    ...(exportDefault(manifest, './client') === './lib/client.js' || exportBrowser(manifest, './client') === './lib/client.js') ? ['lib/client.js'] : [],
     // runtime's shell-held loader subpath ships as its own bundle beside the client half.
     ...exportDefault(manifest, './loader') === './lib/loader.js' ? ['lib/loader.js'] : [],
     // web-react's store subpath ships its own bundle (single-entry builds; no shared chunk).
@@ -210,6 +211,13 @@ function exportDefault(manifest: PackageManifest, subpath: string): string | und
   const entry = manifest.exports?.[subpath]
   if (typeof entry === 'string') return entry
   if (typeof entry === 'object' && entry !== null) return entry.default
+  return undefined
+}
+
+/** Runtime target of an export entry's `browser` condition. */
+function exportBrowser(manifest: PackageManifest, subpath: string): string | undefined {
+  const entry = manifest.exports?.[subpath]
+  if (typeof entry === 'object' && entry !== null) return entry.browser
   return undefined
 }
 

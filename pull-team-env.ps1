@@ -36,7 +36,7 @@ if (-not $vercelCmd) {
         exit 1
     }
     Say "  [..] Vercel CLI not found. Installing..." Yellow
-    npm install -g vercel *> $null
+    npm install -g vercel@latest *> $null
     if ($LASTEXITCODE -ne 0) {
         Say "  [!!] Could not install the Vercel CLI -- team env vars not refreshed." Red
         Say "       Ask a team member to copy $envPath from their machine." Gray
@@ -51,6 +51,17 @@ if ($LASTEXITCODE -ne 0) {
         Say "  [--] Not logged into Vercel -- skipping team env refresh." Gray
         Say "       To refresh: vercel login ; vercel env pull `"$envPath`" --project corax --yes" Gray
         exit 1
+    }
+    # An outdated CLI shows the legacy provider-picker login (GitHub/GitLab/
+    # Bitbucket/Email/SAML with a login-with-<provider> web callback), which
+    # Vercel's server side now treats as a deprecated path -- the browser
+    # page it opens says so. Force the current CLI (pure OAuth Device Flow,
+    # no picker) before every interactive login attempt so this can't recur
+    # just because the global install happens to be stale.
+    Say "  [..] Ensuring the Vercel CLI is current before signing in..." Yellow
+    npm install -g vercel@latest *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Say "  [!!] Could not update the Vercel CLI -- continuing with the installed version." Gray
     }
     Say "  [..] Not logged into Vercel. A browser window will open -- sign in with your Corvus Construction account." Yellow
     vercel login

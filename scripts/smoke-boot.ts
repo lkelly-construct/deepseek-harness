@@ -16,13 +16,17 @@
 // binds its socket and serves 200 well before the plugin tree finishes
 // activating; see packages/bundle/web-app/src/index.ts), then confirm the
 // process is still alive and answering after the plugin tree has settled.
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import type { ChildProcessByStdio } from 'node:child_process'
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import type { Readable } from 'node:stream'
+
+/** `spawn(..., { stdio: ['ignore', 'pipe', 'pipe'] })`'s exact return shape. */
+type SmokeBootChild = ChildProcessByStdio<null, Readable, Readable>
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const READY_LINE = /dsh web: (http:\/\/\S+)/
@@ -32,7 +36,7 @@ const READY_TIMEOUT_MS = 90_000
 // happened. Stay up and keep answering through it before declaring success.
 const SETTLE_MS = 5_000
 
-function waitForReadyLine(child: ChildProcessWithoutNullStreams): Promise<string> {
+function waitForReadyLine(child: SmokeBootChild): Promise<string> {
   return new Promise((resolveReady, reject) => {
     let out = ''
     const timer = setTimeout(() => {
@@ -55,7 +59,7 @@ function waitForReadyLine(child: ChildProcessWithoutNullStreams): Promise<string
   })
 }
 
-async function killAndWait(child: ChildProcessWithoutNullStreams): Promise<void> {
+async function killAndWait(child: SmokeBootChild): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return
   const gone = new Promise<void>(resolveExit => child.once('exit', () => { resolveExit() }))
   child.kill('SIGTERM')

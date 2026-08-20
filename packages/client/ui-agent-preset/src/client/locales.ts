@@ -156,9 +156,9 @@ interface PresetLocaleKeys {
 }
 
 // Only `standard` ships now (see docs/improvement-plan.md — the other five
-// presets were collapsed away: no inheritance existed, so `code`/`cordis`
-// had silently drifted and `browser`/`supabase` had no persona or shell at
-// all). Their locale keys went with them.
+// presets were collapsed away: no inheritance existed, so two had silently
+// drifted and two had no persona or shell at all). Their locale keys went
+// with them.
 const BUILT_IN_PRESET_KEYS: Readonly<Partial<Record<string, PresetLocaleKeys>>> = {
   standard: { name: 'presetStandardName', description: 'presetStandardDescription' },
 }

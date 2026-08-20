@@ -239,10 +239,14 @@
 
 # ── optional MCP servers ─────────────────────────────────────────────────────
 
-# Folded in from the deleted `browser` and `supabase` presets. Both self-disable
-# gracefully rather than blocking mount: Playwright has no credential to check,
-# and Supabase's `!!js process.env.SUPABASE_ACCESS_TOKEN` resolves to `undefined`
-# when the token is absent, which `failOnStartupError: false` tolerates.
+# Folded in from the deleted `browser` and `supabase` presets. Playwright has
+# no credential to check, so it always mounts (and `failOnStartupError: false`
+# tolerates the MCP server itself failing to start). Supabase's config is
+# validated at MOUNT time, before the plugin runs at all -- `env` requires
+# every value to be a string, so passing `SUPABASE_ACCESS_TOKEN: undefined`
+# when the token is absent fails config validation and blocks the WHOLE
+# preset from mounting, not just this row. `failOnStartupError: false` cannot
+# help with that; the row itself must not mount without the token.
 - id: playwright-mcp
   name: '@deepseek-ai/dsh-mcp-client'
   config:
@@ -256,6 +260,7 @@
 
 - id: supabase-mcp
   name: '@deepseek-ai/dsh-mcp-client'
+  disabled: !!js process.env.SUPABASE_ACCESS_TOKEN === undefined
   config:
     transport: stdio
     serverName: supabase
@@ -264,7 +269,7 @@
       - -y
       - '@supabase/mcp-server-supabase@latest'
     env:
-      SUPABASE_ACCESS_TOKEN: !!js process.env.SUPABASE_ACCESS_TOKEN
+      SUPABASE_ACCESS_TOKEN: !!js process.env.SUPABASE_ACCESS_TOKEN ?? ''
     failOnStartupError: false
     reconnect:
       enabled: true

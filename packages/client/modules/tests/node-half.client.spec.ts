@@ -21,6 +21,7 @@ afterEach(() => {
 function writePackage(
   packageName: string,
   metadata: Record<string, unknown> = { dsh: { client: { platform: 'web' } } },
+  exportsClient: unknown = './lib/client.js',
 ): string {
   root ??= realpathSync(mkdtempSync(join(tmpdir(), 'dsh-client-modules-')))
   const pkgRoot = join(root, 'node_modules', ...packageName.split('/'))
@@ -29,7 +30,7 @@ function writePackage(
   writeFileSync(join(pkgRoot, 'package.json'), JSON.stringify({
     name: packageName,
     exports: {
-      './client': './lib/client.js',
+      './client': exportsClient,
       './package.json': './package.json',
     },
     ...metadata,
@@ -96,6 +97,40 @@ describe('client bundle activation', () => {
       `    - package: ${secondName}`,
       `      path: ${secondPath}`,
     ].join('\n'))
+  })
+
+  it('resolves a "browser" condition client export (the custom module-loader bundle form)', () => {
+    const packageName = '@fixture/browser-condition'
+    const clientPath = writePackage(packageName, undefined, {
+      types: './lib/types/client/index.d.ts',
+      browser: './lib/client.js',
+    })
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'window.__ModuleLoader__.load({ id: "x", factory: () => {} })\n')
+    expect(() => construct([packageName])).not.toThrow()
+  })
+
+  it('resolves a "default" condition client export (the plain-ESM bundle form)', () => {
+    const packageName = '@fixture/default-condition'
+    const clientPath = writePackage(packageName, undefined, {
+      types: './lib/types/client/index.d.ts',
+      default: './lib/client.js',
+    })
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'export {}\n')
+    expect(() => construct([packageName])).not.toThrow()
+  })
+
+  it('rejects a client export object with neither "browser" nor "default"', () => {
+    const packageName = '@fixture/unresolvable-condition'
+    writePackage(packageName, undefined, { types: './lib/types/client/index.d.ts' })
+    let thrown: unknown
+    try {
+      construct([packageName])
+    } catch (error) {
+      thrown = error
+    }
+    expect(String(thrown)).toContain('exports["./client"] must be a string or an object with a string "browser" or "default"')
   })
 
   it('does not report other bundle read failures as missing builds', () => {

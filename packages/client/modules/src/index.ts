@@ -128,17 +128,26 @@ function parseDshClient(pkgName: string, value: unknown): DshClientDeclaration |
   }
 }
 
-/** Resolve `exports["./client"]` to a relative path, accepting the string and one-level conditional forms. */
+/**
+ * Resolve `exports["./client"]` to a relative path, accepting the string form
+ * and the one-level conditional forms this workspace ships: `browser` (the
+ * custom `window.__ModuleLoader__.load` bundles, which publint would
+ * otherwise misidentify as CJS) takes precedence over `default` (plain ESM
+ * client bundles) when both are present, though no shipped package sets both.
+ */
 function clientExportOf(pkgName: string, exportsField: unknown): string | undefined {
   if (typeof exportsField !== 'object' || exportsField === null) return undefined
   const client = (exportsField as Record<string, unknown>)['./client']
   if (client === undefined) return undefined
   if (typeof client === 'string') return client
   if (typeof client === 'object' && client !== null) {
-    const fallback = (client as Record<string, unknown>).default
+    const record = client as Record<string, unknown>
+    const browser = record.browser
+    if (typeof browser === 'string') return browser
+    const fallback = record.default
     if (typeof fallback === 'string') return fallback
   }
-  throw new Error(`client-modules: ${pkgName} exports["./client"] must be a string or an object with a string default`)
+  throw new Error(`client-modules: ${pkgName} exports["./client"] must be a string or an object with a string "browser" or "default"`)
 }
 
 /** sha1 content hash shortened to 12 hex chars (bundle rev / graph rev). */

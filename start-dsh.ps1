@@ -39,9 +39,12 @@ try {
 
     # The job runs in its own runspace and inherits nothing, so the path is
     # passed in explicitly.
-    # Optional Cordis overlays for MCP servers (none are enabled by default).
-    # Point this at any .cordis.yml file(s) to load; leave empty to skip.
-    $patchPath = "C:\Users\lkelly\supabase-keys\supabase.cordis.yml"
+    # Optional Cordis overlay for MCP servers, resolved from this machine's
+    # own DSH home rather than a hardcoded path -- point $env:DSH_HOME (or
+    # ~/.dsh by default) at a supabase.cordis.yml to load; absent is fine,
+    # it is skipped.
+    $dshHome = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE ".dsh" }
+    $patchPath = Join-Path $dshHome "supabase.cordis.yml"
 
     $job = Start-Job -ArgumentList $repoPath, $patchPath -ScriptBlock {
         param($RepoRoot, $Patch)
@@ -53,17 +56,29 @@ try {
         }
     }
 
+    # Readiness is the printed `dsh web: <url>` line, not the socket accepting
+    # connections. The webserver row binds its port -- and frontend-static
+    # starts answering 200 -- while later rows in the plugin tree are still
+    # activating; a broken row disposes the whole tree (including that
+    # already-bound socket) moments later. Polling HTTP treats that window as
+    # "ready" and opens the browser right before the crash. The ready line is
+    # printed only once the tree has actually settled -- see
+    # packages/bundle/web-app/src/index.ts.
     $maxWait = 90
     $waited = 0
     $isReady = $false
+    $readyLinePattern = [regex]"dsh web: (http://\S+)"
+    $seenOutput = @()
 
     while ($waited -lt $maxWait -and -not $isReady) {
-        # -UseBasicParsing avoids the PS 5.1 "Script Execution Risk" prompt.
-        try {
-            $null = Invoke-WebRequest -Uri $url -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
-            $isReady = $true
-        }
-        catch {
+        $seenOutput += Receive-Job -Job $job
+        foreach ($line in $seenOutput) {
+            $match = $readyLinePattern.Match([string]$line)
+            if ($match.Success) {
+                $url = $match.Groups[1].Value
+                $isReady = $true
+                break
+            }
         }
 
         if (-not $isReady) {
@@ -72,6 +87,7 @@ try {
                 Write-Host ""
                 Write-Host ""
                 Write-Host "[ERROR] Server exited during startup. Output:" -ForegroundColor Red
+                $seenOutput | ForEach-Object { Write-Host $_ }
                 Receive-Job -Job $job
                 Write-Host ""
                 Write-Host "Try running 'pnpm run build' in $repoPath" -ForegroundColor Yellow
@@ -91,7 +107,8 @@ try {
         Write-Host "Opening browser at $url..." -ForegroundColor Cyan
     }
     else {
-        Write-Host "[TIMEOUT] Opening browser anyway..." -ForegroundColor Yellow
+        Write-Host "[TIMEOUT] Server never printed a ready line within ${maxWait}s. Not opening the browser -- check the output above." -ForegroundColor Yellow
+        return
     }
     Start-Process $url
 

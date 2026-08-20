@@ -122,13 +122,12 @@ describe('the preset list', () => {
     expect(screen.queryByRole('heading', { name: en.customGroup })).toBeNull()
   })
 
-  it('leads with the two ways a preset is created', () => {
+  it('leads with how a preset is created', () => {
     renderSection()
 
     // The page has no create button: the intro is what tells a first-time
-    // reader that copying an existing preset — or drafting one in Creator
-    // mode — IS the way to make one.
-    expect(screen.getByText(new RegExp('Creator mode'))).toBeTruthy()
+    // reader that duplicating the shipped preset IS the way to make one.
+    expect(screen.getByText(new RegExp('Duplicate the shipped preset'))).toBeTruthy()
   })
 
   it('picks a preset by clicking its card, and the one in use is inert', () => {

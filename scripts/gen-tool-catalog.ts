@@ -49,6 +49,7 @@ import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import * as ToolNotebook from '@deepseek-ai/dsh-tool-notebook'
+import * as ToolGit from '@deepseek-ai/dsh-tool-git'
 import TerminalSessionService from '@deepseek-ai/dsh-terminal'
 import * as ToolPty from '@deepseek-ai/dsh-tool-terminal'
 import * as ToolGoal from '@deepseek-ai/dsh-tool-goal'
@@ -309,6 +310,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'Standalone cell-indexed read/insert/replace/delete tool for Jupyter (.ipynb) notebooks over the filesystem seam; not mounted by any shipped preset by default.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-git',
+    dir: 'tool-git',
+    source: 'packages/git/tool-git/src/index.ts',
+    requires: ['ctx.tools', 'ctx.subprocess', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result'],
+    async mount(ctx) {
+      // Model-facing git tools shell out through ctx.subprocess with explicit
+      // argv (no shell layer); registration never spawns, so the real local
+      // service is inert here.
+      await ctx.plugin(LocalSubprocessRuntime)
+      await ctx.plugin(ToolGit)
+    },
+    note:
+      'Five model-facing git tools (status, diff, log, commit, branch) executed through ctx.subprocess with explicit argv vectors. git_diff renders through the shipped `card: \'diff\'` presentation, the same FileDiff[] shape tool-fs edits use.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-fs',

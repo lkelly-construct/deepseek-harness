@@ -1,4 +1,13 @@
-# The `standard` agent preset: the full coding agent, mounted once per process.
+# The `standard` agent preset: the only agent preset, mounted once per process.
+#
+# This used to be one of six presets (standard/code/cordis/minimal/browser/
+# supabase). There is no inheritance mechanism in preset composition — each
+# agent.cordis.yml is a complete roster — so the other five had drifted into
+# either near-duplicates (code/cordis silently lost rows their own header
+# comments claimed they still had) or outright broken compositions (browser/
+# supabase had no persona, no shell, no filesystem at all). Collapsed to this
+# one file; the two MCP servers those broken presets wanted are folded in
+# below as optional rows that self-disable when their env var is absent.
 #
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
 # standing scope; every session naming it joins by scope parentage, so the
@@ -63,15 +72,6 @@
 - id: tool-app-preview
   name: '@deepseek-ai/dsh-tool-app-preview'
 
-# ── artifact publishing ──────────────────────────────────────────────────────
-
-# `publish_artifact` uploads a local file to Supabase Storage and returns a
-# 24-hour presigned URL. Self-disables gracefully when env vars are absent.
-# Requires Corax_AI_Supabase_URL and Corax_AI_Supabase_Service_Key (pulled
-# from the corax Vercel project via `vercel env pull` during deploy).
-- id: tool-artifact-publish
-  name: '@deepseek-ai/dsh-tool-artifact-publish'
-
 # ── filesystem ──────────────────────────────────────────────────────────────
 
 # Both register into the host `tools` registry and provide nothing, so
@@ -116,17 +116,6 @@
 
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
-
-# ── goals ───────────────────────────────────────────────────────────────────
-
-# Only the model-facing tool. The goal SERVICE, its session driver, and the
-# `/goal` command stay on the host plane: the Gateway serves the goal domain as
-# Remote endpoints whose receiver comes from a generated descriptor, so it
-# resolves `goals` on the host and an entry-local realm here would hide it. The
-# registry is keyed by session anyway, so one host instance serves every
-# session. What a preset chooses is whether its agent can call the goal tool.
-- id: tool-goal
-  name: '@deepseek-ai/dsh-tool-goal'
 
 # ── plan mode ───────────────────────────────────────────────────────────────
 
@@ -185,7 +174,7 @@
         headChars: 4096
         tailChars: 1024
 
-# ── delegation and workflows ────────────────────────────────────────────────
+# ── delegation ───────────────────────────────────────────────────────────────
 
 # The `subagents` registry and its spawn/fork backends live in the HOST
 # composition: the registry is a process singleton whose cross-session queries
@@ -193,20 +182,14 @@
 # registered once. This preset contributes the delegation TOOLS, which resolve
 # that host registry.
 #
-# `workflows` is different — nothing outside an agent reads it — so every row
-# that reaches it shares one entry-local realm here, and a consumer left
-# outside would resolve a host registry this preset does not populate.
-#
-# `tool-subagent-report` is host-plane for the same reason as the registry,
-# not because a preset may not want it: it registers a CONTINUABLE SETUP on
-# that singleton rather than a tool this agent calls, and the setup list is
-# not scope-aware — one copy per mounted preset means every child gets
-# `report` registered once per live session, which throws on the second.
+# Workflow-engine rows (`tool-workflow`, `tool-ralph`, `workflow-worker-thread`)
+# and the two permanently-disabled subagent providers (`codex`, `claude-code`)
+# were cut from this group: none render prompt guidance the model needed on an
+# ordinary turn, and the disabled rows were dead weight nobody had opted into.
+# Copy this preset and re-add whichever you actually want.
 - id: delegation
   name: cordis:group
   group: true
-  isolate:
-    workflowEngine: true
   config:
     - id: tool-subagent-control
       name: '@deepseek-ai/dsh-tool-subagent-control'
@@ -227,41 +210,6 @@
         provider: fork
         toolName: subagent_fork
         backgroundMode: continuable
-
-    # Production dsh does not install these optional providers. An opting-in
-    # Profile mounts each provider once on the host plane; copy this preset,
-    # then remove `disabled` from the matching tool row.
-    - id: tool-subagent-codex
-      name: '@deepseek-ai/dsh-tool-subagent'
-      disabled: true
-      config:
-        provider: codex
-        toolName: subagent_codex
-        backgroundMode: one-shot
-        maxDepth: provider-managed
-
-    - id: tool-subagent-claude-code
-      name: '@deepseek-ai/dsh-tool-subagent'
-      disabled: true
-      config:
-        provider: claude-code
-        toolName: subagent_claude_code
-        backgroundMode: one-shot
-        maxDepth: provider-managed
-
-    - id: workflow-worker-thread
-      name: '@deepseek-ai/dsh-workflow-worker-thread'
-      config:
-        provider: spawn
-
-    - id: tool-workflow
-      name: '@deepseek-ai/dsh-tool-workflow'
-
-    - id: tool-ralph
-      name: '@deepseek-ai/dsh-tool-ralph'
-      config:
-        subagentProvider: spawn
-        maxRounds: 64
 
 # ── remaining model-facing rows ─────────────────────────────────────────────
 
@@ -288,3 +236,38 @@
 # `forget_memory` in the host `tools` registry, so it needs no realm.
 - id: memory-local
   name: '@deepseek-ai/dsh-memory-local'
+
+# ── optional MCP servers ─────────────────────────────────────────────────────
+
+# Folded in from the deleted `browser` and `supabase` presets. Both self-disable
+# gracefully rather than blocking mount: Playwright has no credential to check,
+# and Supabase's `!!js process.env.SUPABASE_ACCESS_TOKEN` resolves to `undefined`
+# when the token is absent, which `failOnStartupError: false` tolerates.
+- id: playwright-mcp
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    transport: stdio
+    serverName: playwright
+    command: npx
+    args:
+      - -y
+      - '@playwright/mcp@latest'
+    failOnStartupError: false
+
+- id: supabase-mcp
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    transport: stdio
+    serverName: supabase
+    command: npx
+    args:
+      - -y
+      - '@supabase/mcp-server-supabase@latest'
+    env:
+      SUPABASE_ACCESS_TOKEN: !!js process.env.SUPABASE_ACCESS_TOKEN
+    failOnStartupError: false
+    reconnect:
+      enabled: true
+      initialDelayMs: 1000
+      maxDelayMs: 30000
+      maxAttempts: 5

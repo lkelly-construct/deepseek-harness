@@ -450,9 +450,7 @@
     - id: llm-deepseek
       name: '@deepseek-ai/dsh-llm-deepseek'
 
-    # Dynamic per-session model routing. Registers set_model_hint so the model
-    # can steer its own future steps to a different provider/model at runtime.
-    # Registered on the host context so its agent/request listener is outermost
-    # in the waterfall, overriding installModelSelection's selection last.
-    - id: model-router
-      name: '@deepseek-ai/dsh-model-router'
+    # `model-router` is unmounted: this deployment configures exactly one LLM
+    # route (`llm-deepseek` above), so `set_model_hint` had no second provider
+    # to switch to — every session paid ~660B of "## Model routing" prompt
+    # guidance every turn for a capability that could never do anything.

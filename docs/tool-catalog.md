@@ -24,6 +24,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-bash-persistent` | `bash` | `ctx.tools`, `ctx.terminals`, `an owning Agent at execution time` | `tool/call`, `PTY shell state`, `tool/result` | - | One owner-isolated persistent bash tool; deployment composition supplies the PTY backend and may override the model-facing environment description. |
 | `@deepseek-ai/dsh-tool-str-replace-editor` | `str_replace_editor` | `ctx.tools`, `ctx.fs` | `tool/call`, `fs/observed after view presence/absence, edit absence, or successful mutation`, `tool/result` | - | Standalone view/create/unique literal replace/line insert tool over the filesystem seam; it composes with any shell or terminal API. |
 | `@deepseek-ai/dsh-tool-notebook` | `notebook_edit` | `ctx.tools`, `ctx.fs` | `tool/call`, `fs/observed after read presence/absence or successful mutation`, `tool/result` | - | Standalone cell-indexed read/insert/replace/delete tool for Jupyter (.ipynb) notebooks over the filesystem seam; not mounted by any shipped preset by default. |
+| `@deepseek-ai/dsh-tool-git` | `git_branch`, `git_commit`, `git_diff`, `git_log`, `git_status` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | Five model-facing git tools (status, diff, log, commit, branch) executed through ctx.subprocess with explicit argv vectors. git_diff renders through the shipped `card: 'diff'` presentation, the same FileDiff[] shape tool-fs edits use. |
 | `@deepseek-ai/dsh-tool-fs` | `edit`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (read_image registration)`, `ctx.llm + an image-capable route (read_image execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@deepseek-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. `read_image` is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
 | `@deepseek-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@deepseek-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
@@ -658,6 +659,145 @@ Read, insert, replace, or delete cells in a Jupyter notebook (.ipynb) file, inde
 Source: [`packages/fs/tool-notebook/src/index.ts`](../packages/fs/tool-notebook/src/index.ts)
 
 Standalone cell-indexed read/insert/replace/delete tool for Jupyter (.ipynb) notebooks over the filesystem seam; not mounted by any shipped preset by default.
+
+<a id="deepseek-aidsh-tool-git"></a>
+
+## `@deepseek-ai/dsh-tool-git`
+
+### `git_branch`
+
+List, create, or delete branches. Without arguments, lists all local branches with their tracking status. Pass name to create a new branch at HEAD. Pass delete: true with name to delete a branch.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Branch name to create or delete. Omit to list branches."
+    },
+    "delete": {
+      "type": "boolean",
+      "description": "Delete the named branch (must also pass name)."
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Directory to run git in. Defaults to the session workspace."
+    }
+  }
+}
+```
+
+Source: [`packages/git/tool-git/src/index.ts`](../packages/git/tool-git/src/index.ts)
+
+### `git_commit`
+
+Create a commit with the given message. Only commits already-staged changes unless all: true. Run git_status first. Only call this when the user explicitly asks you to commit.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message": {
+      "type": "string",
+      "description": "Commit message in the imperative mood: \"Fix X\", \"Add Y\"."
+    },
+    "all": {
+      "type": "boolean",
+      "description": "Stage all tracked modified/deleted files before committing (git commit -a). Does not add untracked files."
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Directory to run git in. Defaults to the session workspace."
+    }
+  },
+  "required": [
+    "message"
+  ]
+}
+```
+
+Source: [`packages/git/tool-git/src/index.ts`](../packages/git/tool-git/src/index.ts)
+
+### `git_diff`
+
+Show changes as a unified diff. Without arguments shows unstaged working-tree changes. Set staged: true for staged-but-uncommitted changes. Pass a ref to compare against that commit, branch, or tag. Optionally scope to one file or directory.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string",
+      "description": "Commit, branch, or tag to diff against (e.g. \"HEAD\", \"main\", \"abc1234\"). Omit for working-tree vs index."
+    },
+    "staged": {
+      "type": "boolean",
+      "description": "Show staged changes (index vs HEAD) instead of working-tree changes."
+    },
+    "path": {
+      "type": "string",
+      "description": "Limit the diff to this file or directory."
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Directory to run git in. Defaults to the session workspace."
+    }
+  }
+}
+```
+
+Source: [`packages/git/tool-git/src/index.ts`](../packages/git/tool-git/src/index.ts)
+
+### `git_log`
+
+Show recent commit history: hash, author, date, and subject per commit.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "n": {
+      "type": "integer",
+      "description": "Number of commits to show (default 20)."
+    },
+    "branch": {
+      "type": "string",
+      "description": "Branch or ref to show history for (default: current branch)."
+    },
+    "path": {
+      "type": "string",
+      "description": "Limit to commits touching this file or directory."
+    },
+    "workdir": {
+      "type": "string",
+      "description": "Directory to run git in. Defaults to the session workspace."
+    }
+  }
+}
+```
+
+Source: [`packages/git/tool-git/src/index.ts`](../packages/git/tool-git/src/index.ts)
+
+### `git_status`
+
+Show the working tree status: staged changes, unstaged changes, and untracked files. Run this before any git_commit call to confirm what will be included.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "workdir": {
+      "type": "string",
+      "description": "Directory to run git in. Defaults to the session workspace."
+    }
+  }
+}
+```
+
+Source: [`packages/git/tool-git/src/index.ts`](../packages/git/tool-git/src/index.ts)
+
+Five model-facing git tools (status, diff, log, commit, branch) executed through ctx.subprocess with explicit argv vectors. git_diff renders through the shipped `card: 'diff'` presentation, the same FileDiff[] shape tool-fs edits use.
 
 <a id="deepseek-aidsh-tool-fs"></a>
 

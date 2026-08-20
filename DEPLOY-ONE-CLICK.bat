@@ -10,6 +10,7 @@ REM    4. Install dependencies and build
 REM    5. Apply team config (models, plugins, timezone)
 REM    6. Create the Desktop shortcut
 REM    7. Pull Supabase env vars via Vercel CLI
+REM    8. Launch the app and open your browser
 REM
 REM  The VS Code extension is not installed by this script -- it iframes the
 REM  Web UI instead of driving the SDK directly, so its diff-review and
@@ -208,20 +209,33 @@ echo ============================================================
 echo.
 echo Installed to: %INSTALL_DIR%
 echo.
-echo Next steps:
-echo   1. Double-click "DeepSeek Harness" on your Desktop
-echo   2. Your browser opens to http://127.0.0.1:3080
-echo   3. Go to Settings ^> Models ^> openrouter and add your API key
+echo Next steps (after launch):
+echo   1. Go to Settings ^> Models ^> openrouter and add your API key
 echo        OpenRouter: https://openrouter.ai/settings/keys
-echo   4. Go to Settings ^> Plugins ^> Web search and add your DeepSeek key
+echo   2. Go to Settings ^> Plugins ^> Web search and add your DeepSeek key
 echo        DeepSeek:   https://platform.deepseek.com
-echo   5. Click Apply, pick a model, start chatting
+echo   3. Click Apply, pick a model, start chatting
 echo.
 echo Models pre-configured: Auto Router, DeepSeek V4, Qwen3, Gemini Flash Image
 echo Web search: enabled (via Vercel env pull)
 echo Date awareness: enabled (agent's system prompt states today's date)
 echo Supabase MCP: enabled for all Corax projects (via Vercel env pull)
 echo.
-echo Close the PowerShell window to stop the server.
+pause
+
+REM ---------------- Launch ----------------
+echo.
+echo Launching DeepSeek Harness...
+set "SHORTCUT=%USERPROFILE%\Desktop\DeepSeek Harness.lnk"
+if exist "%SHORTCUT%" (
+    REM Opens a new window running start-dsh.ps1 -- the same thing double-clicking
+    REM the Desktop shortcut does. This deploy script's own window can close
+    REM once that one is up; close the NEW window to stop the server.
+    start "" "%SHORTCUT%"
+    echo   [OK] Launched -- a new window will open your browser to http://127.0.0.1:3080
+) else (
+    echo   [!!] Shortcut not found at %SHORTCUT% -- launch manually:
+    echo        powershell -ExecutionPolicy Bypass -File "%INSTALL_DIR%\start-dsh.ps1"
+)
 echo.
 pause

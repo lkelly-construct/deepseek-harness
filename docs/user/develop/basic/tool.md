@@ -41,7 +41,11 @@ Restart the development command if it is not running:
 pnpm dsh web --patch ./scratch-plugin/cordis.yml
 ```
 
-Open `http://127.0.0.1:3080` and ask: `Use the greet tool to greet Ada.` The model can call `greet` and receives `Hello, Ada!` as the tool result.
+Port 3080 is the default for every `dsh web` instance, including a Web session you're already using to follow this tutorial. Add `--port 3081` (or another free port) to the command above if 3080 is taken, or you'll hit `EADDRINUSE`.
+
+If this command runs inside a sandboxed shell tool rather than a plain terminal, `tsx`'s esbuild service spawning a worker process can fail with `spawn EPERM` under a confining sandbox mode — see [Process Sandbox](../../subsystems/sandbox.md). Run it from an unconfined terminal, or under a permission preset that allows process spawn, if you hit that.
+
+Open `http://127.0.0.1:3080` (or whichever port you chose) and ask: `Use the greet tool to greet Ada.` The model can call `greet` and receives `Hello, Ada!` as the tool result.
 
 ## Next steps
 

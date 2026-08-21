@@ -17,6 +17,20 @@ try {
 
     Push-Location $repoPath
 
+    # A server already listening on 3080 is very likely a still-running,
+    # healthy instance from an earlier launch (this script's own window, or
+    # the Desktop shortcut opened twice) -- starting a second one only dies
+    # with EADDRINUSE. Reuse what's already there instead of colliding with
+    # it: open the browser and stop, rather than spawn a doomed second boot.
+    $existingListener = Get-NetTCPConnection -LocalPort 3080 -State Listen -ErrorAction SilentlyContinue
+    if ($existingListener) {
+        Write-Host ""
+        Write-Host "[OK] DeepSeek Harness is already running at $url" -ForegroundColor Green
+        Write-Host "Opening browser instead of starting a second server..." -ForegroundColor Cyan
+        Start-Process $url
+        return
+    }
+
     # pnpm missing is a setup problem, not a crash -- say so plainly.
     Write-Host "Checking pnpm..." -ForegroundColor Yellow
     $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue

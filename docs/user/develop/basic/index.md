@@ -53,6 +53,8 @@ Run `pwd` from the repository root, then create `scratch-plugin/cordis.yml` as a
 
 The plugin path must be absolute. A patch file contributes configuration but does not change the profile directory from which the loader resolves module paths.
 
+On Windows, a bare drive-letter path (`C:\Users\...\my-plugin.ts` or `/C:/Users/...`) fails with `ERR_UNSUPPORTED_ESM_URL_SCHEME` — the loader needs a `file://` URL instead: `file:///C:/Users/.../scratch-plugin/src/my-plugin.ts`, forward slashes throughout, with spaces in the path (e.g. a username with a space) percent-encoded as `%20`.
+
 Start the Web UI with that overlay:
 
 ```sh

@@ -1,0 +1,35 @@
+# @deepseek-ai/dsh-image-router
+
+Image-aware model routing. When a step's request history contains an image, the router rewrites the step's provider/model to a configured image-capable route; once no image remains in history, it restores the session's base route. It registers no tools and adds no prompt prose.
+
+Routing is presence-based rather than "new image" based: a text-only provider rejects any history that still carries an image block, so the router keeps the request on the vision route until the image leaves derived history (for example, via compaction).
+
+## Config
+
+| Key | Required | Meaning |
+|---|---:|---|
+| `imageProvider` | yes | Registered provider route owning the image-capable model. |
+| `imageModel` | yes | Provider-owned model id that declares image input. |
+
+The router listens on the host `agent/request` waterfall as the outermost listener, so it sees the config `installModelSelection` already applied. On an image-bearing step it resolves the configured route and requires it to declare `image` input before routing; a route that does not declare image input, or that is not registered, fails the request loudly rather than dumping an image onto a text-only model.
+
+## Model Experience
+
+### Routing
+
+#### What the model sees
+
+Nothing changes in the prompt, schema, or messages. The model runs on its session route; the router only selects which provider/model serves a step.
+
+#### Token effect
+
+None beyond the selected provider/model's own usage. Routing changes have no other model-visible cost.
+
+#### KV Cache effect
+
+Switching provider/model selects a different cache domain for the affected steps; the reusable prefix is otherwise unchanged.
+
+## Known Limitations and Deferred Work
+
+- **Base-route restoration is session-local and in-process** — after a reload mid-image, the router re-detects the image and re-routes; restoration reads `AgentOptions`, which is the route the session was created with, not a later manual picker change that has not been assembled.
+- **Manual selection on the vision route is not distinguishable from routing** — a step with no image whose current config equals the image route is restored to the base route, so manually selecting the vision model for non-image work does not persist.

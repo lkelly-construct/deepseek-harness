@@ -63,8 +63,16 @@
     - id: agent-default-model
       name: '@deepseek-ai/dsh-agent-default-model'
       config:
-        provider: deepseek-official
-        model: deepseek-v4-flash
+        provider: openrouter
+        model: deepseek/deepseek-v4-flash-0731
+
+    # Image-aware routing: a step whose history carries an image is served by
+    # the vision model below; text-only steps stay on the default route above.
+    - id: image-router
+      name: '@deepseek-ai/dsh-image-router'
+      config:
+        imageProvider: openrouter
+        imageModel: qwen/qwen2.5-vl-72b-instruct
 
     - id: jobs
       name: '@deepseek-ai/dsh-jobs-local'
@@ -85,15 +93,27 @@
     - id: credentials
       name: '@deepseek-ai/dsh-credentials-local'
 
-    # The pi-ai multi-provider twin, mounted dormant: zero routes (and no extra
-    # models in the picker) until a `llm-pi-ai:` settings section supplies provider
-    # profiles — then those routes register live, keys resolving per request
-    # through their apiKeyEnv references, and drop again when the section empties.
-    # Supplying those profiles is exactly what the web Models page does. Which
-    # adapters exist is composition; which providers run is the user's settings
-    # document.
+    # The pi-ai multi-provider twin ships one live OpenRouter route. The key is a
+    # per-user credential reference (OPENROUTER_API_KEY), never inlined here; the
+    # model list is the deployment default and a `llm-pi-ai:` settings section
+    # still layers over it per user.
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
+      config:
+        providers:
+          openrouter:
+            apiKeyEnv: OPENROUTER_API_KEY
+            baseURL: https://openrouter.ai/api/v1
+            models:
+              - id: deepseek/deepseek-v4-flash-0731
+                name: DeepSeek V4 Flash 0731
+              - id: deepseek/deepseek-v4-pro-0813
+                name: DeepSeek V4 Pro 0813
+              - id: qwen/qwen2.5-vl-72b-instruct
+                name: Qwen2.5 VL 72B
+                input:
+                  - text
+                  - image
 
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'

@@ -775,6 +775,12 @@
         "src/**/*.ts"
       ]
     },
+    "packages/routing/image-router": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
     "packages/storage/tool-artifact-publish": {
       "entry": [],
       "project": [
@@ -809,6 +815,12 @@
       ]
     },
     "packages/routing/model-router": {
+      "entry": [],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/routing/image-router": {
       "entry": [],
       "project": [
         "src/**/*.ts"

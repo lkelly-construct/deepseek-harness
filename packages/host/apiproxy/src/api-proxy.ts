@@ -2474,7 +2474,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 }
               }
             }
-            const durable = await durablePromptContent(ctx, content)
+            // A bare image paste carries no instruction; give the vision model
+            // an explicit task so it analyzes the image instead of idling.
+            const effectiveContent = hasImage && !content.some(part => part.type === 'text' && part.text.trim().length > 0)
+              ? [{ type: 'text', text: 'Describe this image in detail.' } satisfies PromptContentPart, ...content]
+              : content
+            const durable = await durablePromptContent(ctx, effectiveContent)
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') agent.steer(message)
             else agent.followup(message)

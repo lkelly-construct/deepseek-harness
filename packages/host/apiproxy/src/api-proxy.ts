@@ -2446,12 +2446,32 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             if (hasImage) {
               const current = selectionFor(agent).current
               const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
-              if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                return err(request, {
-                  code: 'attachment-error',
-                  message: `Model "${current.model}" does not support image input.`,
-                  details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-                })
+              const supportsImage = modelInfo.inputModalities === undefined || modelInfo.inputModalities.includes('image')
+              if (!supportsImage) {
+                // A deployment may route image-bearing steps to a configured
+                // vision route even when the session's selected model is
+                // text-only (the image-router plugin). Admit the image when
+                // such a route exists and declares image input; the router
+                // serves those steps.
+                const router = ctx.get('image-router')
+                if (router !== undefined) {
+                  const routerInfo = await ctx.llm.resolveModelInfo(router.provider, router.model)
+                  const routerAccepts = routerInfo.inputModalities === undefined
+                    || routerInfo.inputModalities.includes('image')
+                  if (!routerAccepts) {
+                    return err(request, {
+                      code: 'attachment-error',
+                      message: `Model "${router.model}" does not support image input.`,
+                      details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
+                    })
+                  }
+                } else {
+                  return err(request, {
+                    code: 'attachment-error',
+                    message: `Model "${current.model}" does not support image input.`,
+                    details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
+                  })
+                }
               }
             }
             const durable = await durablePromptContent(ctx, content)

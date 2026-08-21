@@ -17,20 +17,6 @@ try {
 
     Push-Location $repoPath
 
-    # A server already listening on 3080 is very likely a still-running,
-    # healthy instance from an earlier launch (this script's own window, or
-    # the Desktop shortcut opened twice) -- starting a second one only dies
-    # with EADDRINUSE. Reuse what's already there instead of colliding with
-    # it: open the browser and stop, rather than spawn a doomed second boot.
-    $existingListener = Get-NetTCPConnection -LocalPort 3080 -State Listen -ErrorAction SilentlyContinue
-    if ($existingListener) {
-        Write-Host ""
-        Write-Host "[OK] DeepSeek Harness is already running at $url" -ForegroundColor Green
-        Write-Host "Opening browser instead of starting a second server..." -ForegroundColor Cyan
-        Start-Process $url
-        return
-    }
-
     # pnpm missing is a setup problem, not a crash -- say so plainly.
     Write-Host "Checking pnpm..." -ForegroundColor Yellow
     $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
@@ -51,12 +37,45 @@ try {
     # stale or missing %USERPROFILE%\.dsh\.env is exactly why the
     # supabase-mcp preset row silently self-disables. Best-effort: offline,
     # not logged in, or no project access must not block chatting with the
-    # app, which needs none of this.
+    # app, which needs none of this. Runs BEFORE the already-running check
+    # below so a stale-but-listening server can be recognized as stale.
+    $envPath = Join-Path $env:USERPROFILE ".dsh\.env"
+
     Write-Host ""
     Write-Host "Refreshing team env vars..." -ForegroundColor Yellow
     & (Join-Path $repoPath "pull-team-env.ps1")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  Continuing without them -- team-shared rows (Supabase MCP) will stay disabled." -ForegroundColor Gray
+    }
+
+    # A server already listening on 3080 is very likely a still-running,
+    # healthy instance from an earlier launch (this script's own window, or
+    # the Desktop shortcut opened twice) -- starting a second one only dies
+    # with EADDRINUSE. But `dsh web` reads .env once at boot and keeps that
+    # snapshot for its whole lifetime: if the refresh above just pulled a
+    # newer .env than the running server ever saw (a rotated Supabase/
+    # OpenRouter token, for example), reusing it silently locks in the old
+    # credentials instead of failing loudly. Only reuse a listener that
+    # started AFTER the current .env's last write; otherwise replace it.
+    $existingListener = Get-NetTCPConnection -LocalPort 3080 -State Listen -ErrorAction SilentlyContinue
+    if ($existingListener) {
+        $existingProc = Get-Process -Id ($existingListener[0].OwningProcess) -ErrorAction SilentlyContinue
+        $envMtimeNow = if (Test-Path $envPath) { (Get-Item $envPath).LastWriteTimeUtc } else { $null }
+        $serverIsStale = $existingProc -and $envMtimeNow -and ($existingProc.StartTime.ToUniversalTime() -lt $envMtimeNow)
+
+        if ($serverIsStale) {
+            Write-Host ""
+            Write-Host "[..] Running server predates the just-refreshed .env (stale credentials) -- restarting it." -ForegroundColor Yellow
+            Stop-Process -Id $existingProc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+        }
+        else {
+            Write-Host ""
+            Write-Host "[OK] DeepSeek Harness is already running at $url" -ForegroundColor Green
+            Write-Host "Opening browser instead of starting a second server..." -ForegroundColor Cyan
+            Start-Process $url
+            return
+        }
     }
 
     Write-Host ""

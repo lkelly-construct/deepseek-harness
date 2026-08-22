@@ -92,6 +92,13 @@
 - id: tool-git
   name: '@deepseek-ai/dsh-tool-git'
 
+# Offline TypeScript diagnostics: the model runs `typecheck` to enumerate
+# compiler errors without a language server or network. Self-contained
+# (tools/systemPrompt/subprocess only); the `lsp` tool stays unmounted until a
+# language-server provider is configured for the web profile.
+- id: tool-typecheck
+  name: '@deepseek-ai/dsh-tool-typecheck'
+
 # ── background jobs ────────────────────────────────────────────────────────
 
 # Only the model-facing controls. The task REGISTRY stays on the host plane:

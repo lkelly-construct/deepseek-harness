@@ -9,6 +9,9 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
@@ -19,6 +22,23 @@ import * as ToolTypecheck from '@deepseek-ai/dsh-tool-typecheck'
 import { parseTscOutput, TYPECHECK_PROMPT_TEXT } from '@deepseek-ai/dsh-tool-typecheck'
 
 const testToolSignal = new AbortController().signal
+
+/**
+ * A real temp workspace carrying a minimal `typescript` install (a stub `bin/tsc` and a package.json
+ * with no `exports`, so `typescript/bin/tsc` resolves as a plain file). The tool resolves the CLI bin
+ * through the workspace root, so tests must root the session at a directory where typescript exists.
+ */
+const WORKSPACE = (() => {
+  const dir = mkdtempSync(join(tmpdir(), 'typecheck-ws-'))
+  const tsRoot = join(dir, 'node_modules', 'typescript')
+  mkdirSync(join(tsRoot, 'bin'), { recursive: true })
+  writeFileSync(join(tsRoot, 'package.json'), JSON.stringify({ name: 'typescript', version: '5.9.0', bin: { tsc: 'bin/tsc' } }))
+  writeFileSync(join(tsRoot, 'bin', 'tsc'), '')
+  return dir
+})()
+
+/** The absolute bin path `resolveTypescriptBin` derives from {@link WORKSPACE}. */
+const TSC_BIN = join(WORKSPACE, 'node_modules', 'typescript', 'bin', 'tsc')
 
 /** One scripted collect-mode stream, returned by `readFrom(0)` after settlement. */
 interface ScriptedStream {
@@ -216,10 +236,10 @@ describe('execution', () => {
   it('spawns the fixed tsc argv in the session cwd and renders clean output as empty', async () => {
     const { ctx, subprocess } = await setup()
     subprocess.handler = () => runResult('')
-    const result = await call(ctx, {}, { agent: agent('/sessions/s1') })
+    const result = await call(ctx, {}, { agent: agent(WORKSPACE) })
     expect(result.isError).toBe(false)
-    expect(subprocess.spawns[0]?.argv).toEqual(['tsc', '--noEmit', '--pretty', 'false', '-p', 'tsconfig.json'])
-    expect(subprocess.spawns[0]?.cwd).toBe('/sessions/s1')
+    expect(subprocess.spawns[0]?.argv).toEqual(['node', TSC_BIN, '--noEmit', '--pretty', 'false', '-p', 'tsconfig.json'])
+    expect(subprocess.spawns[0]?.cwd).toBe(WORKSPACE)
     expect((subprocess.spawns[0]?.stdio.stdout as { maxBytes: number }).maxBytes).toBe(1_000_000)
     expect((subprocess.spawns[0]?.stdio.stderr as { maxBytes: number }).maxBytes).toBe(64_000)
     expect(result).toMatchObject({ isError: false, value: { kind: 'diagnostics', diagnostics: [] } })
@@ -229,14 +249,14 @@ describe('execution', () => {
   it('passes an explicit project through as -p', async () => {
     const { ctx, subprocess } = await setup()
     subprocess.handler = () => runResult('')
-    await call(ctx, { project: 'configs/tsconfig.app.json' }, { agent: agent('/w') })
+    await call(ctx, { project: 'configs/tsconfig.app.json' }, { agent: agent(WORKSPACE) })
     expect(subprocess.spawns[0]?.argv).toContain('configs/tsconfig.app.json')
   })
 
   it('returns parsed diagnostics on a failing compile and renders them one-based', async () => {
     const { ctx, subprocess } = await setup()
     subprocess.handler = () => runResult(TS_ERRORS, { exitCode: 1 })
-    const result = await call(ctx, {}, { agent: agent('/w') })
+    const result = await call(ctx, {}, { agent: agent(WORKSPACE) })
     expect(result.isError).toBe(false)
     if (result.isError) throw new Error('expected typecheck success')
     expect(result.value).toEqual({
@@ -245,7 +265,7 @@ describe('execution', () => {
         { severity: 1, code: 'TS2322', message: 'Type \'string\' is not assignable to type \'number\'.', range: { start: { line: 2, character: 4 }, end: { line: 2, character: 4 } } },
         { severity: 1, code: 'TS2304', message: 'Cannot find name \'x\'.', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } },
       ],
-      resolvedWorkspaceUri: `file://${pathToFileURL('/w').pathname === '/w' ? '' : '/C:'}/w`,
+      resolvedWorkspaceUri: pathToFileURL(WORKSPACE).href,
     })
     expect(text(result)).toBe('3:5 error: Type \'string\' is not assignable to type \'number\'. [TS2322]\n1:1 error: Cannot find name \'x\'. [TS2304]')
   })
@@ -253,7 +273,7 @@ describe('execution', () => {
   it('caps the rendered text at maxResultChars', async () => {
     const { ctx, subprocess } = await setup({ maxResultChars: 60 })
     subprocess.handler = () => runResult(TS_ERRORS, { exitCode: 1 })
-    const result = await call(ctx, {}, { agent: agent('/w') })
+    const result = await call(ctx, {}, { agent: agent(WORKSPACE) })
     expect(text(result)).toHaveLength(60)
     expect(text(result)).toContain('diagnostics truncated')
   })
@@ -261,7 +281,7 @@ describe('execution', () => {
   it('fails a nonzero exit with no parsed diagnostics, carrying the stderr excerpt', async () => {
     const { ctx, subprocess } = await setup()
     subprocess.handler = () => runResult('', { exitCode: 2, stderr: { text: 'error TS5023: Unknown compiler option \'--watcel\'.' } })
-    const result = await call(ctx, {}, { agent: agent('/w') })
+    const result = await call(ctx, {}, { agent: agent(WORKSPACE) })
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('tsc exited with 2')
     expect(text(result)).toContain('TS5023')
@@ -270,7 +290,7 @@ describe('execution', () => {
   it('classifies a spawn rejection as a tool failure', async () => {
     const { ctx, subprocess } = await setup()
     subprocess.handler = () => ({ reject: new Error('spawn ENOENT') })
-    const result = await call(ctx, {}, { agent: agent('/w') })
+    const result = await call(ctx, {}, { agent: agent(WORKSPACE) })
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('spawn ENOENT')
   })
@@ -282,7 +302,7 @@ describe('execution', () => {
       controller.abort('timeout')
       return runResult('', { exitCode: null, signal: 'SIGTERM' })
     }
-    const result = await call(ctx, {}, { agent: agent('/w'), signal: controller.signal })
+    const result = await call(ctx, {}, { agent: agent(WORKSPACE), signal: controller.signal })
     expect(subprocess.spawns[0]?.signal).toBe(controller.signal)
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('typecheck aborted')

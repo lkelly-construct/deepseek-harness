@@ -1,11 +1,13 @@
 /**
  * Pure protocol translation for the local host: what the server's capabilities allow, and how its
- * `Location`/`LocationLink`/`Hover` payloads normalize into the seam's closed result unions. No I/O
- * or process state — every function here is a pure transform, which the fake-stdio tests pin exactly.
+ * `Location`/`LocationLink`/`Hover`/`Diagnostic` payloads normalize into the seam's closed result
+ * unions. No I/O or process state — every function here is a pure transform, which the fake-stdio
+ * tests pin exactly.
  * @module @deepseek-ai/dsh-lsp-stdio/translate
  */
 
 import type {
+  LspDiagnostic,
   LspHover,
   LspLocation,
   LspOperation,
@@ -35,6 +37,7 @@ export function requestMethod(operation: LspOperation): string {
     case 'findReferences': return 'textDocument/references'
     case 'goToImplementation': return 'textDocument/implementation'
     case 'hover': return 'textDocument/hover'
+    case 'diagnostics': return 'textDocument/diagnostic'
     /* v8 ignore next -- exhaustive over the closed LspOperation union; unreachable. */
     default: return assertNever(operation, 'requestMethod')
   }
@@ -47,6 +50,7 @@ function capabilityValue(capabilities: WireServerCapabilities, operation: LspOpe
     case 'findReferences': return capabilities.referencesProvider
     case 'goToImplementation': return capabilities.implementationProvider
     case 'hover': return capabilities.hoverProvider
+    case 'diagnostics': return capabilities.diagnosticProvider
     /* v8 ignore next -- exhaustive over the closed LspOperation union; unreachable. */
     default: return assertNever(operation, 'capabilityValue')
   }
@@ -227,6 +231,67 @@ function isMarkedString(value: unknown): value is WireMarkedString {
   if (value === null || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
   return typeof record.language === 'string' && typeof record.value === 'string'
+}
+
+/**
+ * Normalize a `Diagnostic[]` payload (pull `textDocument/diagnostic` result or pushed
+ * `publishDiagnostics` batch) to the seam's diagnostics. An omitted severity defaults to error (1),
+ * the conservative client interpretation the protocol leaves open; a string or number `code`
+ * stringifies and any other `code` form is dropped; entries must carry a string `message` and a
+ * well-formed range. `null` (no result) normalizes to an empty list.
+ * @param payload - the raw `Diagnostic[]` array.
+ * @returns the normalized diagnostics (empty for `null`/`[]`).
+ * @throws Error for a missing, non-array, or structurally invalid payload.
+ */
+export function normalizeDiagnostics(payload: unknown): LspDiagnostic[] {
+  if (payload === null) return []
+  if (payload === undefined) throw malformedResponse('LSP diagnostics result was missing')
+  if (!Array.isArray(payload)) throw malformedResponse('LSP diagnostics result was not an array')
+  const diagnostics: LspDiagnostic[] = []
+  for (const entry of payload) {
+    if (entry === null || typeof entry !== 'object') {
+      throw malformedResponse('LSP diagnostics result contained a non-object entry')
+    }
+    const record = entry as Record<string, unknown>
+    if (typeof record.message !== 'string') {
+      throw malformedResponse('LSP diagnostic message was not a string')
+    }
+    if (!isRange(record.range)) {
+      throw malformedResponse('LSP diagnostic range was malformed')
+    }
+    diagnostics.push({
+      severity: toSeverity(record.severity),
+      message: record.message,
+      range: toRange(record.range),
+      ...(typeof record.code === 'string' || typeof record.code === 'number'
+        ? { code: String(record.code) }
+        : {}),
+    })
+  }
+  return diagnostics
+}
+
+/**
+ * Extract the `diagnostics` array from a `textDocument/publishDiagnostics` notification and normalize
+ * it. Strictness mirrors {@link normalizeDiagnostics}; a malformed push is rejected by the caller's
+ * notification sink policy.
+ * @param params - the raw `publishDiagnostics` params (`{ uri, diagnostics }`).
+ * @returns the normalized diagnostics.
+ * @throws Error when the params are not an object or the diagnostics array is malformed.
+ */
+export function normalizePublishedDiagnostics(params: unknown): LspDiagnostic[] {
+  const record = params as Record<string, unknown> | null
+  if (record === null || typeof record !== 'object') {
+    throw malformedResponse('publishDiagnostics params were not an object')
+  }
+  return normalizeDiagnostics(record.diagnostics)
+}
+
+/** Map an untrusted wire severity to the LSP 1-4 scale, defaulting an omitted value to error (1). */
+function toSeverity(severity: unknown): LspDiagnostic['severity'] {
+  if (severity === 1 || severity === 2 || severity === 3 || severity === 4) return severity
+  if (severity === undefined || severity === null) return 1
+  throw malformedResponse('LSP diagnostic severity was not 1-4')
 }
 
 /** Create the stable structured error used for malformed server result payloads. */

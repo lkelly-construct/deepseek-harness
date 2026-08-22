@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import {
   DEFAULT_MAX_LOCATIONS,
   DEFAULT_MAX_RESULT_CHARS,
+  formatDiagnostics,
   formatHover,
   formatLocations,
   LSP_OPERATIONS,
@@ -11,7 +12,7 @@ import {
   presentLspCall,
   renderUri,
 } from '@deepseek-ai/dsh-tool-lsp'
-import type { LspLocation } from '@deepseek-ai/dsh-lsp'
+import type { LspDiagnostic, LspLocation } from '@deepseek-ai/dsh-lsp'
 
 const WS = resolve('/home/u/proj')
 const WS_URI = pathToFileURL(WS).href
@@ -20,8 +21,12 @@ function loc(uri: string, line: number, character = 0): LspLocation {
   return { uri, range: { start: { line, character }, end: { line, character: character + 1 } } }
 }
 
+function diag(line: number, character: number, severity: LspDiagnostic['severity'], message: string, code?: string): LspDiagnostic {
+  return { severity, message, range: { start: { line, character }, end: { line, character } }, ...code !== undefined ? { code } : {} }
+}
+
 describe('parseLspArgs', () => {
-  it('accepts the four operations and converts one-based to zero-based', () => {
+  it('accepts the five operations and converts one-based to zero-based', () => {
     for (const operation of LSP_OPERATIONS) {
       const input = parseLspArgs({ operation, file_path: 'a.ts', line: 3, character: 5 })
       expect(input.operation).toBe(operation)
@@ -157,6 +162,31 @@ describe('formatHover', () => {
 
   it('still honors a cap smaller than the truncation marker', () => {
     expect(formatHover({ contents: 'a'.repeat(100) }, 10)).toHaveLength(10)
+  })
+})
+
+describe('formatDiagnostics', () => {
+  it('renders a no-result line for an empty list', () => {
+    expect(formatDiagnostics([], DEFAULT_MAX_RESULT_CHARS)).toBe('No diagnostics.')
+  })
+
+  it('renders one-based severity/code/message lines', () => {
+    const text = formatDiagnostics([
+      diag(2, 4, 1, 'Type \'string\' is not assignable to type \'number\'.', 'TS2322'),
+      diag(0, 0, 2, 'Cannot find name \'x\'.', 'TS2304'),
+    ], DEFAULT_MAX_RESULT_CHARS)
+    expect(text).toBe('3:5 error: Type \'string\' is not assignable to type \'number\'. [TS2322]\n1:1 warning: Cannot find name \'x\'. [TS2304]')
+  })
+
+  it('omits the code suffix when absent and labels every severity', () => {
+    const text = formatDiagnostics([diag(0, 0, 3, 'info'), diag(1, 1, 4, 'hint')], DEFAULT_MAX_RESULT_CHARS)
+    expect(text).toBe('1:1 information: info\n2:2 hint: hint')
+  })
+
+  it('caps the complete rendered text including its truncation marker', () => {
+    const text = formatDiagnostics([diag(0, 0, 1, 'a'.repeat(100))], 60)
+    expect(text).toHaveLength(60)
+    expect(text).toContain('diagnostics truncated')
   })
 })
 

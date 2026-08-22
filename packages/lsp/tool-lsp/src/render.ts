@@ -7,12 +7,18 @@
  */
 
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
-import type { LspHover, LspLocation, LspOperation, LspPosition } from '@deepseek-ai/dsh-lsp'
+import type { LspDiagnostic, LspHover, LspLocation, LspOperation, LspPosition } from '@deepseek-ai/dsh-lsp'
 import { posix, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** The four operations the tool exposes, as a runtime tuple for schema enum + validation. */
-export const LSP_OPERATIONS: readonly LspOperation[] = ['goToDefinition', 'findReferences', 'goToImplementation', 'hover']
+/** The five operations the tool exposes, as a runtime tuple for schema enum + validation. */
+export const LSP_OPERATIONS: readonly LspOperation[] = [
+  'goToDefinition',
+  'findReferences',
+  'goToImplementation',
+  'hover',
+  'diagnostics',
+]
 
 /** Default cap on rendered locations before an omission marker is appended. */
 export const DEFAULT_MAX_LOCATIONS = 100
@@ -37,8 +43,10 @@ export interface LspToolArgs {
 }
 
 /**
- * Validate and convert model arguments: `operation` must be one of the four; `line`/`character` are
- * positive one-based integers converted to the seam's zero-based position.
+ * Validate and convert model arguments: `operation` must be one of the five; `line`/`character` are
+ * positive one-based integers converted to the seam's zero-based position. Every operation requires
+ * the coordinates (the closed schema stays uniform); `diagnostics` providers ignore them and check
+ * the whole document.
  * @param args - the schema-validated raw arguments.
  * @returns the validated input with a zero-based position.
  * @throws Error when the operation is unknown or a coordinate is not a positive integer.
@@ -58,7 +66,7 @@ export function parseLspArgs(args: LspToolArgs): LspToolInput {
   }
 }
 
-/** Whether a string is one of the four operations. */
+/** Whether a string is one of the five operations. */
 function isOperation(value: string): value is LspOperation {
   return (LSP_OPERATIONS as readonly string[]).includes(value)
 }
@@ -117,6 +125,32 @@ export function formatLocations(
 export function formatHover(hover: LspHover | null, maxResultChars: number): string {
   const text = hover === null ? 'No hover information.' : hover.contents
   return boundResult(text, maxResultChars, 'hover')
+}
+
+/** Human-readable label for each LSP severity. */
+const SEVERITY_LABELS: Record<LspDiagnostic['severity'], string> = {
+  1: 'error',
+  2: 'warning',
+  3: 'information',
+  4: 'hint',
+}
+
+/**
+ * Render a diagnostics result as one `line:character severity: message [code]` line per diagnostic
+ * (parts of the queried file, so no path prefix, matching the hover intent: plain text, no UI
+ * vocabulary). Applies the complete result cap with its marker last.
+ * @param diagnostics - the seam's diagnostics (possibly empty).
+ * @param maxResultChars - the complete rendered-text cap, including truncation metadata.
+ * @returns the rendered text; a distinct no-result line when there are none.
+ */
+export function formatDiagnostics(diagnostics: readonly LspDiagnostic[], maxResultChars: number): string {
+  if (diagnostics.length === 0) return boundResult('No diagnostics.', maxResultChars, 'diagnostics')
+  const lines = diagnostics.map((diagnostic) => {
+    const position = diagnostic.range.start
+    const code = diagnostic.code === undefined ? '' : ` [${diagnostic.code}]`
+    return `${position.line + 1}:${position.character + 1} ${SEVERITY_LABELS[diagnostic.severity]}: ${diagnostic.message}${code}`
+  })
+  return boundResult(lines.join('\n'), maxResultChars, 'diagnostics')
 }
 
 /** Bound a complete rendered result, including the truncation notice itself. */

@@ -3,18 +3,18 @@
  * {@link LspError} taxonomy and the {@link LspProviderId} brand factory are runtime and live in
  * `index.ts`. Positions and ranges are zero-based UTF-16, matching the protocol; the model-facing
  * tool owns the one-based cursor convention. The seam exposes no protocol types, process or document
- * controls, or generic JSON-RPC escape hatch — only the four semantic operations.
+ * controls, or generic JSON-RPC escape hatch — only the five semantic operations.
  * @module @deepseek-ai/dsh-lsp/types
  */
 
 import type { LspProviderId } from './brand.ts'
 
 /**
- * The four semantic queries the seam and model expose. A closed union: adding an operation is a
+ * The five semantic queries the seam and model expose. A closed union: adding an operation is a
  * compile-enforced change across the seam, providers, and the tool. Symbols and call hierarchy are
  * not operations here; they need different schemas.
  */
-export type LspOperation = 'goToDefinition' | 'findReferences' | 'goToImplementation' | 'hover'
+export type LspOperation = 'goToDefinition' | 'findReferences' | 'goToImplementation' | 'hover' | 'diagnostics'
 
 /** A zero-based UTF-16 cursor coordinate, matching the LSP wire convention. */
 export interface LspPosition {
@@ -40,7 +40,8 @@ export interface LspQueryRequest {
   readonly operation: LspOperation
   /** The source file to query (relative to `workspaceRoot` or absolute; the provider canonicalizes). */
   readonly filePath: string
-  /** The zero-based UTF-16 cursor position to query at. */
+  /** The zero-based UTF-16 cursor position to query at. Required for every operation; `diagnostics`
+   *  providers ignore it (the whole document is checked). */
   readonly position: LspPosition
   /** The workspace root the provider resolves against and indexes; required, never defaulted. */
   readonly workspaceRoot: string
@@ -73,18 +74,37 @@ export interface LspHover {
 }
 
 /**
+ * One normalized diagnostic: a problem in the document with an LSP severity (1 = error, 2 = warning,
+ * 3 = information, 4 = hint) and an optional stable code (e.g. `TS2322`). `message` is the
+ * model-facing problem statement; `range` is where the problem applies.
+ */
+export interface LspDiagnostic {
+  /** LSP severity: 1 error, 2 warning, 3 information, 4 hint. */
+  readonly severity: 1 | 2 | 3 | 4
+  /** Stable machine code, when the server supplied one. */
+  readonly code?: string
+  /** The problem statement. */
+  readonly message: string
+  /** The range the diagnostic applies to. */
+  readonly range: LspRange
+}
+
+/**
  * The closed result union. Navigation operations (`goToDefinition`, `findReferences`,
- * `goToImplementation`) normalize to `locations`; `hover` normalizes to content or `null`.
- * Consumers `switch` on `kind` to exhaustiveness so a new arm breaks compilation until handled.
+ * `goToImplementation`) normalize to `locations`; `hover` normalizes to content or `null`;
+ * `diagnostics` normalizes to the document's problems. Consumers `switch` on `kind` to
+ * exhaustiveness so a new arm breaks compilation until handled.
  *
  * The `locations` variant carries `resolvedWorkspaceUri`: the provider's canonical `file:` URI for
  * the request's workspace root. A caller that relativizes location URIs MUST use this, not parse the
  * request's possibly symlinked process path with host-platform rules; the execution platform may
- * differ from the caller's.
+ * differ from the caller's. The `diagnostics` variant carries the same URI so a caller can link
+ * relative diagnostic paths.
  */
 export type LspQueryResult =
   | { readonly kind: 'locations'; readonly locations: readonly LspLocation[]; readonly resolvedWorkspaceUri: string }
   | { readonly kind: 'hover'; readonly hover: LspHover | null }
+  | { readonly kind: 'diagnostics'; readonly diagnostics: readonly LspDiagnostic[]; readonly resolvedWorkspaceUri: string }
 
 /**
  * A language-server backend registered on `ctx.lsp`. Each provider owns a stable {@link
@@ -108,7 +128,7 @@ export interface LspProvider {
 
 /**
  * The LSP capability seam (`ctx.lsp`). Owns provider registration/selection and normalized query
- * execution; exposes exactly the four operations and no protocol escape hatch.
+ * execution; exposes exactly the five operations and no protocol escape hatch.
  */
 export interface LspService {
   /**

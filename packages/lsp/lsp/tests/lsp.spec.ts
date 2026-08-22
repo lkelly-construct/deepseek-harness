@@ -152,6 +152,19 @@ describe('Lsp registration', () => {
     await expect(lsp.query(query('a.ts', 'hover'))).resolves.toEqual(hover)
   })
 
+  it('routes a diagnostics query to the selected provider with the position preserved', async () => {
+    const { lsp } = await mountLsp()
+    const diagnostics: LspQueryResult = {
+      kind: 'diagnostics',
+      diagnostics: [{ severity: 1, code: 'TS2322', message: 'bad', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } }],
+      resolvedWorkspaceUri: 'file:///ws',
+    }
+    const ts = makeProvider('ts', { '.ts': 'typescript' }, diagnostics)
+    lsp.registerProvider(ts)
+    await expect(lsp.query(query('a.ts', 'diagnostics'))).resolves.toEqual(diagnostics)
+    expect(ts.seen[0]).toMatchObject({ operation: 'diagnostics', position: { line: 0, character: 0 } })
+  })
+
   it('forwards the abort signal verbatim to the provider', async () => {
     const { lsp } = await mountLsp()
     const provider = makeProvider('ts', { '.ts': 'typescript' })

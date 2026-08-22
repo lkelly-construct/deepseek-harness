@@ -82,10 +82,10 @@ describe('tool-lsp registration', () => {
     expect(ctx.tools.get('lsp')?.timeoutMs).toBe(5000)
   })
 
-  it('exposes exactly the four operations in the schema enum', async () => {
+  it('exposes exactly the five operations in the schema enum', async () => {
     const { ctx } = await mount(stubProvider(() => okLocations))
     const schema = ctx.tools.get('lsp')?.parameters as { properties: { operation: { enum: string[] } } }
-    expect(schema.properties.operation.enum).toEqual(['goToDefinition', 'findReferences', 'goToImplementation', 'hover'])
+    expect(schema.properties.operation.enum).toEqual(['goToDefinition', 'findReferences', 'goToImplementation', 'hover', 'diagnostics'])
   })
 
   it('has no default export (namespace plugin shape)', () => {
@@ -185,6 +185,24 @@ describe('tool-lsp execution', () => {
     const result = await call(ctx, { operation: 'hover', file_path: 'a.ts', line: 1, character: 1 }, '/ws')
     expect(result.content[0]).toEqual({ type: 'text', text: 'No hover information.' })
     expect(result).toMatchObject({ isError: false, value: { kind: 'hover', hover: null } })
+  })
+
+  it('renders diagnostics (severities and codes) and keeps the coordinates in the value', async () => {
+    const diagnostics = [
+      { severity: 1 as const, code: 'TS2322', message: 'Type \'string\' is not assignable to type \'number\'.', range: { start: { line: 2, character: 4 }, end: { line: 2, character: 4 } } },
+      { severity: 2 as const, message: 'no code', range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } },
+    ]
+    const { ctx } = await mount(stubProvider(() => ({
+      kind: 'diagnostics' as const,
+      diagnostics,
+      resolvedWorkspaceUri: pathToFileURL(workspaceRoot).href,
+    })))
+    const result = await call(ctx, { operation: 'diagnostics', file_path: 'a.ts', line: 9, character: 9 }, workspaceRoot)
+    expect(result.content[0]).toEqual({
+      type: 'text',
+      text: '3:5 error: Type \'string\' is not assignable to type \'number\'. [TS2322]\n1:1 warning: no code',
+    })
+    expect(result).toMatchObject({ isError: false, value: { kind: 'diagnostics', diagnostics, resolvedWorkspaceUri: pathToFileURL(workspaceRoot).href } })
   })
 
   it('fails LSP_WORKSPACE_REQUIRED without a session cwd', async () => {

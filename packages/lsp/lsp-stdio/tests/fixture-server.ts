@@ -7,7 +7,10 @@
  * - LSP_FAKE_ENCODING: advertised positionEncoding (default utf-16; "utf-8" forces a mismatch).
  * - LSP_FAKE_SYNC: textDocumentSync value as JSON (default 1/Full).
  * - LSP_FAKE_CAPS: JSON of extra capability flags merged into the defaults.
- * - LSP_FAKE_DEF / LSP_FAKE_REFS / LSP_FAKE_IMPL / LSP_FAKE_HOVER: JSON result per request.
+ * - LSP_FAKE_DEF / LSP_FAKE_REFS / LSP_FAKE_IMPL / LSP_FAKE_HOVER / LSP_FAKE_DIAG: JSON result per request.
+ * - LSP_FAKE_PUSH_DIAG: "1" publishes a fixed diagnostics batch for every opened URI via
+ *   textDocument/publishDiagnostics (the push-only fallback path). LSP_FAKE_DIAGNOSTIC_PROVIDER: "1"
+ *   advertises diagnosticProvider (pull); without it the fixture is push-only.
  * - LSP_FAKE_HANG: "1" makes textDocument/* requests never respond (for abort/timeout tests).
  * - LSP_FAKE_CRASH_ON_OPEN: "1" exits the process when a didOpen arrives (crash test).
  * - LSP_FAKE_EXIT_AFTER_REPLY: "1" exits the process right after answering a textDocument/* request,
@@ -44,6 +47,8 @@ const noShutdown = process.env.LSP_FAKE_NO_SHUTDOWN === '1'
 const onOpen = process.env.LSP_FAKE_ON_OPEN
 const errorReply = process.env.LSP_FAKE_ERROR === '1'
 const garbage = process.env.LSP_FAKE_GARBAGE === '1'
+const pushDiag = process.env.LSP_FAKE_PUSH_DIAG === '1'
+const diagnosticProvider = process.env.LSP_FAKE_DIAGNOSTIC_PROVIDER === '1'
 
 let serverRequestId = 10_000
 const pendingServerRequests = new Map<number, string>()
@@ -65,6 +70,7 @@ function resultFor(method: string): unknown {
       if (echoName !== undefined) return { contents: process.env[echoName] ?? `<${echoName} unset>` }
       return envJson('LSP_FAKE_HOVER', null)
     }
+    case 'textDocument/diagnostic': return envJson('LSP_FAKE_DIAG', null)
     default: return null
   }
 }
@@ -113,6 +119,7 @@ function handle(message: { id?: number; method?: string; params?: unknown; resul
           referencesProvider: true,
           implementationProvider: true,
           hoverProvider: true,
+          ...(diagnosticProvider ? { diagnosticProvider: true } : {}),
           ...(extraCaps as Record<string, unknown>),
         },
       },
@@ -141,6 +148,19 @@ function handle(message: { id?: number; method?: string; params?: unknown; resul
     if (openMarker !== undefined) {
       const params = message.params as { textDocument?: { text?: unknown } } | undefined
       appendFileSync(openMarker, `${JSON.stringify(params?.textDocument?.text)}\n`)
+    }
+    // Push-only diagnostics: publish a fixed batch for the opened URI (the client keys by URI).
+    if (pushDiag) {
+      const uri = (message.params as { textDocument?: { uri?: unknown } } | undefined)?.textDocument?.uri
+      send({
+        method: 'textDocument/publishDiagnostics',
+        params: {
+          uri,
+          diagnostics: [
+            { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 5 } }, severity: 2, code: 'P1', message: 'pushed warning' },
+          ],
+        },
+      })
     }
     if (onOpen !== undefined) emitServerRequest(onOpen)
     return

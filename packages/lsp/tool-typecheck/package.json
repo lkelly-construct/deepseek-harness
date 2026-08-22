@@ -1,6 +1,6 @@
 {
-  "name": "@deepseek-ai/dsh-tool-git",
-  "description": "Model-facing git tools: status, diff, log, commit, branch — executed through ctx.subprocess with explicit argv vectors",
+  "name": "@deepseek-ai/dsh-tool-typecheck",
+  "description": "Offline TypeScript diagnostics fallback tool: runs tsc --noEmit --pretty false through the subprocess capability and parses the output into the LSP seam's LspDiagnostic shape (severity 1). Separate, explicit tool distinct from the lsp tool; no network, no language server required",
   "version": "0.1.0-rc.7",
   "publishConfig": {
     "access": "public"
@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
-    "directory": "packages/git/tool-git"
+    "directory": "packages/lsp/tool-typecheck"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -22,50 +22,35 @@
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
-    "./git": {
-      "types": "./lib/types/git.d.ts",
-      "default": "./lib/git.js"
-    },
-    "./worktree": {
-      "types": "./lib/types/worktree.d.ts",
-      "default": "./lib/worktree.js"
-    },
-    "./shadow-run": {
-      "types": "./lib/types/shadow-run.d.ts",
-      "default": "./lib/shadow-run.js"
-    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "lib/git.js",
-    "lib/worktree.js",
-    "lib/shadow-run.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-system-prompt": "workspace:^",
+    "@deepseek-ai/dsh-timeout": "workspace:^",
+    "@deepseek-ai/dsh-tool-lsp": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^"
+  },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:^"
   },
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/dsh-agent": "workspace:^",
-    "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-subprocess": "workspace:^",
-    "@deepseek-ai/dsh-system-prompt": "workspace:^",
-    "@deepseek-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^"
-  },
   "devDependencies": {
-    "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-lsp": "workspace:^",
     "@deepseek-ai/dsh-subprocess": "workspace:^",
-    "@deepseek-ai/dsh-subprocess-local": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-timeout": "workspace:^",
-    "@deepseek-ai/dsh-tools": "workspace:^"
+    "@deepseek-ai/dsh-tool-lsp": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^"
   }
 }

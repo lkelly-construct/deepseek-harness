@@ -1432,6 +1432,25 @@ describe('default one-shot summarizer', () => {
     await expect(compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL)))
       .rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
   })
+
+  it('projects a text-file block into the summary text prefixed by its name', async () => {
+    const { compact } = await summarizerHarness([{
+      type: 'text-file',
+      name: 'notes.md',
+      mediaType: 'text/markdown',
+      text: 'keep this line\nand this one',
+    }])
+    const output = await compact.runSummarize(promptInput('history'), agent(conversation(1), MODEL))
+    expect(output.summary).toEqual([
+      { type: 'text', text: '[file: notes.md]\nkeep this line\nand this one' },
+    ])
+    expect(output.rawOutput).toEqual([{
+      type: 'text-file',
+      name: 'notes.md',
+      mediaType: 'text/markdown',
+      text: 'keep this line\nand this one',
+    }])
+  })
 })
 
 describe('automatic listener and loader composition', () => {

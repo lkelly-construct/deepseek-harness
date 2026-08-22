@@ -68,6 +68,7 @@ export class LspConnection {
   private readonly stdin: Writable
   private readonly decoder: MessageDecoder
   private readonly pending = new Map<number, Pending>()
+  private readonly writer: ConnectionWriter
   private nextId = 1
   private closeReason: Error | undefined
   /** Set once the process has fully exited; the instance awaits it during teardown. */
@@ -77,15 +78,18 @@ export class LspConnection {
    * @param spec - how to launch the server and answer its config requests.
    * @param spawner - the subprocess seam's spawn (the provider passes `ctx.subprocess.spawn`).
    * @param onServerRequest - answers a server→client request; rejects to send an error response.
+   * @param onNotification - optional sink for server→client notifications (e.g. `publishDiagnostics`).
    * @param writer - message writer; tests inject callback failures without relying on OS pipe races.
    */
   constructor(
     spec: ConnectionSpec,
     spawner: ConnectionSpawner,
     private readonly onServerRequest: (method: string, params: unknown) => Promise<unknown>,
-    private readonly writer: ConnectionWriter = writeConnectionMessage,
+    writer?: ConnectionWriter,
+    private readonly onNotification?: (method: string, params: unknown) => void,
   ) {
     this.decoder = new MessageDecoder(spec.maxMessageBytes)
+    this.writer = writer ?? writeConnectionMessage
     // stdin/stdout are piped protocol streams this endpoint frames itself;
     // stderr is a collected diagnostic tail (no spill — the bounded tail IS
     // the contract). The seam owns detachment and tree-scoped signalling.
@@ -251,7 +255,9 @@ export class LspConnection {
       return
     }
     if (typeof method === 'string') {
-      // A server→client notification (e.g. diagnostics, logs): ignored by this MVP host.
+      // A server→client notification (e.g. publishDiagnostics): forward it to the instance's handler
+      // when one is registered; otherwise this MVP host ignores it.
+      this.onNotification?.(method, frame.params)
       return
     }
     if (typeof id === 'number') this.handleResponse(id, frame)

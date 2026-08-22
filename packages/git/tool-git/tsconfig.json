@@ -15,6 +15,7 @@
     { "path": "../../core/tools" },
     { "path": "../../core/system-prompt" },
     { "path": "../../runtime-diagnostics/invariants" },
-    { "path": "../../subprocess/subprocess" }
+    { "path": "../../subprocess/subprocess" },
+    { "path": "../../util/timeout" }
   ]
 }

@@ -9,10 +9,12 @@
 
 import { LspError } from '@deepseek-ai/dsh-lsp'
 import type {
+  LspDiagnostic,
   LspOperation,
   LspProviderQuery,
   LspQueryResult,
 } from '@deepseek-ai/dsh-lsp'
+import { assertNever } from '@deepseek-ai/dsh-llm'
 import { deadline } from '@deepseek-ai/dsh-timeout'
 import { abortable, abortError } from './abort.ts'
 import { LspConnection } from './connection.ts'
@@ -21,8 +23,10 @@ import type { HostSource } from './host.ts'
 import type { WireInitializeResult, WireServerCapabilities } from './protocol.ts'
 import {
   negotiatePositionEncoding,
+  normalizeDiagnostics,
   normalizeHover,
   normalizeLocations,
+  normalizePublishedDiagnostics,
   requestMethod,
   supportsOperation,
   supportsTransientOpen,
@@ -54,6 +58,10 @@ export class LspInstance {
   private processClosed = false
   /** Populated once `initialize` succeeds; a failed handshake rejects every query. */
   private readonly ready: Promise<void>
+  /** Freshest `publishDiagnostics` batch per document URI, for servers that push rather than pull. */
+  private readonly publishedDiagnostics = new Map<string, LspDiagnostic[]>()
+  /** Per-URI resolvers armed while a push-diagnostics query waits for its batch. */
+  private readonly publishWatchers = new Map<string, () => void>()
 
   /**
    * @param spec - the launch, initialize, and teardown parameters.
@@ -61,7 +69,13 @@ export class LspInstance {
    * @param writer - optional connection writer used by transport conformance tests.
    */
   constructor(private readonly spec: InstanceSpec, spawner: ConnectionSpawner, writer?: ConnectionWriter) {
-    this.connection = new LspConnection(spec, spawner, (method, params) => this.answerServerRequest(method, params), writer)
+    this.connection = new LspConnection(
+      spec,
+      spawner,
+      (method, params) => this.answerServerRequest(method, params),
+      writer,
+      (method, params) => { this.onServerNotification(method, params) },
+    )
     this.ready = this.initialize()
     // A handshake rejection must not surface as an unhandled rejection before the first query awaits
     // it; queries attach the real handler.
@@ -143,7 +157,9 @@ export class LspInstance {
     const capabilities = this.capabilities
     /* v8 ignore next -- `ready` resolves only after capabilities are set, else it rejects above; defensive. */
     if (capabilities === undefined) throw new Error('LSP instance is not initialized')
-    if (!supportsOperation(capabilities, request.operation)) {
+    // Diagnostics has a push fallback (see runQuery), so the capability gate applies only to the four
+    // pull-only navigation/hover operations; otherwise a push-only server would fail before opening.
+    if (request.operation !== 'diagnostics' && !supportsOperation(capabilities, request.operation)) {
       throw new LspError(`server does not support ${request.operation}`, 'LSP_UNSUPPORTED_OPERATION')
     }
     if (!supportsTransientOpen(capabilities.textDocumentSync)) {
@@ -151,6 +167,10 @@ export class LspInstance {
     }
 
     const uri = source.fileUrl
+    const pullsDiagnostics = request.operation !== 'diagnostics' || supportsOperation(capabilities, 'diagnostics')
+    // A push-only server publishes after didOpen; drop any batch from an earlier open of this URI so
+    // a stale publish cannot answer a new query.
+    if (request.operation === 'diagnostics' && !pullsDiagnostics) this.publishedDiagnostics.delete(uri)
     let opened = false
     try {
       /* v8 ignore next -- guards an abort landing between the ready wait and didOpen; not deterministically reproducible. */
@@ -166,6 +186,13 @@ export class LspInstance {
         throw error
       }
       opened = true
+      if (request.operation === 'diagnostics' && !pullsDiagnostics) {
+        return {
+          kind: 'diagnostics',
+          diagnostics: await this.waitForPublishedDiagnostics(uri, signal),
+          resolvedWorkspaceUri: this.spec.workspaceUri,
+        }
+      }
       const payload = await this.sendRequest(request.operation, uri, request.position, signal)
       return this.normalize(request.operation, payload)
     } finally {
@@ -195,13 +222,15 @@ export class LspInstance {
     position: LspProviderQuery['position'],
     signal?: AbortSignal,
   ): Promise<unknown> {
-    const params = {
+    const params: Record<string, unknown> = {
       textDocument: { uri },
       position: { line: position.line, character: position.character },
       // findReferences always includes declarations: the caller gets no flag and impact analysis
       // never omits the defining site.
       ...(operation === 'findReferences' ? { context: { includeDeclaration: true } } : {}),
     }
+    // textDocument/diagnostic (LSP 3.17) takes no cursor position; the whole document is queried.
+    if (operation === 'diagnostics') delete params.position
     const requestId = this.connection.peekNextId()
     const send = this.connection.request(requestMethod(operation), params)
     if (signal === undefined) return send
@@ -241,12 +270,71 @@ export class LspInstance {
   }
 
   private normalize(operation: LspOperation, payload: unknown): LspQueryResult {
-    if (operation === 'hover') {
-      return { kind: 'hover', hover: normalizeHover(payload) }
+    switch (operation) {
+      case 'hover':
+        return { kind: 'hover', hover: normalizeHover(payload) }
+      case 'diagnostics':
+        return {
+          kind: 'diagnostics',
+          diagnostics: normalizeDiagnostics(payload),
+          resolvedWorkspaceUri: this.spec.workspaceUri,
+        }
+      case 'goToDefinition':
+      case 'findReferences':
+      case 'goToImplementation':
+        // The filesystem provider owns URI syntax for the execution platform, which may differ from
+        // the harness host. Preserve that coordinate through rendering instead of reparsing
+        // `spec.cwd` there.
+        return { kind: 'locations', locations: normalizeLocations(payload), resolvedWorkspaceUri: this.spec.workspaceUri }
+      /* v8 ignore next -- exhaustive over the closed LspOperation union; unreachable. */
+      default: return assertNever(operation, 'normalize')
     }
-    // The filesystem provider owns URI syntax for the execution platform, which may differ from the
-    // harness host. Preserve that coordinate through rendering instead of reparsing `spec.cwd` there.
-    return { kind: 'locations', locations: normalizeLocations(payload), resolvedWorkspaceUri: this.spec.workspaceUri }
+  }
+
+  /**
+   * Sink for server→client notifications. `textDocument/publishDiagnostics` batches are buffered per
+   * document URI so a push-only server can answer a `diagnostics` query (see
+   * {@link waitForPublishedDiagnostics}). Other notifications are ignored.
+   */
+  private onServerNotification(method: string, params: unknown): void {
+    if (method !== 'textDocument/publishDiagnostics') return
+    const record = params as Record<string, unknown> | null
+    if (record === null || typeof record !== 'object') return
+    if (typeof record.uri !== 'string') return
+    // A malformed batch must not crash the connection's dispatch loop; the query's freshness window
+    // simply expires and yields an empty result. Keep the try to exactly this normalization call.
+    try {
+      this.publishedDiagnostics.set(record.uri, normalizePublishedDiagnostics(record))
+    } catch {
+      // Malformed push payloads leave the buffer untouched: the pull-free assumptions encoded in
+      // `waitForPublishedDiagnostics` still hold.
+    }
+    const watcher = this.publishWatchers.get(record.uri)
+    if (watcher !== undefined) {
+      this.publishWatchers.delete(record.uri)
+      watcher()
+    }
+  }
+
+  /**
+   * Wait for the freshest `textDocument/publishDiagnostics` batch for a URI after `didOpen`. Bounded
+   * by the kill-grace budget (this host's subsecond protocol timer) so a server that never publishes
+   * yields an empty result instead of hanging the query; a caller abort propagates instead.
+   */
+  private async waitForPublishedDiagnostics(uri: string, signal?: AbortSignal): Promise<LspDiagnostic[]> {
+    const arrival = new Promise<void>((resolve) => { this.publishWatchers.set(uri, resolve) })
+    const bound = deadline(undefined, this.spec.killGraceMs, 'LSP_DIAGNOSTICS_PUSH')
+    const combined = signal === undefined ? bound.signal : AbortSignal.any([signal, bound.signal])
+    try {
+      await abortable(arrival, combined)
+    } catch (error) {
+      if (signal?.aborted) throw error
+      // Only the freshness bound expired: no batch arrived, so the document has no published problems.
+    } finally {
+      this.publishWatchers.delete(uri)
+      bound[Symbol.dispose]()
+    }
+    return this.publishedDiagnostics.get(uri) ?? []
   }
 
   private answerServerRequest(method: string, params: unknown): Promise<unknown> {
@@ -331,8 +419,9 @@ function markSettled(): boolean {
 
 /**
  * The client capabilities advertised at `initialize`: UTF-16 positions, workspace folders and
- * configuration, markdown/plaintext hover, and link support for definition/implementation. No
- * dynamic registration; the server's returned capabilities are authoritative.
+ * configuration, markdown/plaintext hover, link support for definition/implementation, and pull
+ * diagnostics plus pushed `publishDiagnostics`. No dynamic registration; the server's returned
+ * capabilities are authoritative.
  */
 const CLIENT_CAPABILITIES = {
   general: { positionEncodings: ['utf-16'] },
@@ -343,5 +432,7 @@ const CLIENT_CAPABILITIES = {
     definition: { linkSupport: true },
     implementation: { linkSupport: true },
     references: {},
+    diagnostic: { dynamicRegistration: false },
+    publishDiagnostics: { relatedInformation: false },
   },
 } as const

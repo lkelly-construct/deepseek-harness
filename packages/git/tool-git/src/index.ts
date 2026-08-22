@@ -1,53 +1,61 @@
+/**
+ * Model-facing git tools for the DeepSeek Harness: status, diff, log, commit,
+ * branch, plus shadow-worktree tooling (`git_worktree`, `git_shadow_run`).
+ * Every executable git invocation goes through `ctx.subprocess.spawn` with
+ * bounded collected output — never a raw child-process fork; shadow worktrees
+ * are confined to the repository's `dsh-shadow` root and rolled back on exit.
+ * @module @deepseek-ai/dsh-tool-git
+ */
+
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { DiffCallView, DiffResultView, FileDiff, GenericCallView, TerminalCallView, TerminalResultView, ToolResult } from '@deepseek-ai/dsh-tools'
+import type { DiffCallView, DiffResultView, FileDiff, GenericCallView, TerminalCallView, TerminalResultView } from '@deepseek-ai/dsh-tools'
+import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { SubprocessHandle, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
+import { formatResult, runGit } from './git.ts'
+import { resolveCwd, terminalResult } from './helpers.ts'
+import type { GitToolCaps } from './helpers.ts'
+import { registerShadowRunTool } from './shadow-run.ts'
+import { registerWorktreeTool } from './worktree.ts'
 
 export const name = 'tool-git'
 export const inject = ['tools', 'subprocess', 'systemPrompt']
 
-// ── subprocess helper ──────────────────────────────────────────────────────
+/** Default cooperative timeout budget (ms) for the shadow-run validation command. */
+const DEFAULT_SHADOW_TIMEOUT_MS = 30_000
+/** Default per-stream collected-output cap (bytes) for a shadow-run command's tail. */
+const DEFAULT_SHADOW_OUTPUT_BYTES = 64 * 1024
+/** Default terminate-escalation grace (ms) for every spawned process. */
+const DEFAULT_GRACE_MS = 3_000
 
-interface GitResult {
-  stdout: string
-  stderr: string
-  exitCode: number
+/** Plugin config for the git tool suite. */
+export interface Config {
+  /** Cooperative tool-call timeout budget (ms) for `git_shadow_run` (and `git_worktree`). */
+  timeoutMs?: number
+  /** Max stdout bytes retained (tail) for one shadow-run validation command. */
+  maxStdoutBytes?: number
+  /** Max stderr bytes retained (tail) for one shadow-run validation command. */
+  maxStderrBytes?: number
+  /** Terminate-escalation grace (ms) handed to every spawned process. */
+  graceMs?: number
 }
 
-async function runGit(ctx: Context, argv: string[], cwd: string, signal: AbortSignal): Promise<GitResult> {
-  const handle: SubprocessHandle = ctx.subprocess.spawn({
-    argv: ['git', ...argv],
-    cwd,
-    stdio: {
-      stdin: 'ignore',
-      stdout: { maxBytes: 4_000_000 },
-      stderr: { maxBytes: 64 * 1024 },
-    },
-    graceMs: 3_000,
-    signal,
-  } satisfies SubprocessSpawnSpec)
-  const outcome = await handle.done
-  const stdout = handle.collected.stdout?.readFrom(0)
-  const stderr = handle.collected.stderr?.readFrom(0)
-  return {
-    stdout: stdout?.text ?? '',
-    stderr: stderr?.text ?? '',
-    exitCode: outcome.exitCode ?? 0,
+/** Runtime configuration schema for the git tool suite. */
+export const Config: z<Config> = z.object({
+  timeoutMs: z.number().default(DEFAULT_SHADOW_TIMEOUT_MS),
+  maxStdoutBytes: z.number().default(DEFAULT_SHADOW_OUTPUT_BYTES),
+  maxStderrBytes: z.number().default(DEFAULT_SHADOW_OUTPUT_BYTES),
+  graceMs: z.number().default(DEFAULT_GRACE_MS),
+})
+
+/** The shape after schemastery applied the defaults. */
+type ResolvedConfig = Required<Config>
+
+function assertPositiveInteger(name: string, value: number): void {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`tool-git: ${name} must be a positive integer`)
   }
-}
-
-function formatResult(r: GitResult): string {
-  const out = r.stdout.trim()
-  const err = r.stderr.trim()
-  const body = [out, err].filter(Boolean).join('\n')
-  if (r.exitCode === 0) return body || '(no output)'
-  return `${body}\n[exit code: ${r.exitCode}]`.trim()
-}
-
-function resolveCwd(workdir: string | undefined, agent: Agent | undefined): string {
-  return workdir ?? agent?.session.header.cwd ?? process.cwd()
 }
 
 // ── diff parsing ───────────────────────────────────────────────────────────
@@ -71,17 +79,27 @@ function parseDiffOutput(raw: string): FileDiff[] {
   return diffs
 }
 
-// ── presentation helpers ───────────────────────────────────────────────────
-
-function terminalResult(title: string, result: ToolResult): TerminalResultView | undefined {
-  if (result.isError) return undefined
-  const text = result.content.find(b => b.type === 'text')?.text ?? ''
-  return { card: 'terminal', title, output: text }
-}
-
 // ── plugin ─────────────────────────────────────────────────────────────────
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config): void {
+  // schemastery has already filled every defaulted field.
+  const resolved = config as ResolvedConfig
+  assertPositiveInteger('timeoutMs', resolved.timeoutMs)
+  assertPositiveInteger('maxStdoutBytes', resolved.maxStdoutBytes)
+  assertPositiveInteger('maxStderrBytes', resolved.maxStderrBytes)
+  assertPositiveInteger('graceMs', resolved.graceMs)
+  if (resolved.timeoutMs > MAX_TIMER_DELAY_MS) {
+    throw new Error(`tool-git: timeoutMs must be no greater than ${MAX_TIMER_DELAY_MS}`)
+  }
+  if (resolved.graceMs > MAX_TIMER_DELAY_MS) {
+    throw new Error(`tool-git: graceMs must be no greater than ${MAX_TIMER_DELAY_MS}`)
+  }
+  const caps: GitToolCaps = {
+    timeoutMs: resolved.timeoutMs,
+    maxStdoutBytes: resolved.maxStdoutBytes,
+    maxStderrBytes: resolved.maxStderrBytes,
+    graceMs: resolved.graceMs,
+  }
 
   ctx.systemPrompt.section({
     name: 'tool:git',
@@ -95,7 +113,13 @@ Use the git_* tools for all version-control operations.
 - Write commit messages in the imperative mood ("Fix X", "Add Y").
 - Never use git push --force unless the user explicitly instructs it.
 - Never amend a commit that has already been pushed.
-- Prefer small, focused commits over large batches.`,
+- Prefer small, focused commits over large batches.
+
+## Shadow worktrees
+
+- git_shadow_run creates an isolated checkout under <git dir>/dsh-shadow and runs one validation command inside it (typecheck, build, tests), then automatically removes the worktree and its temporary branch. It never touches the main working tree.
+- Use git_shadow_run for commands that mutate a checkout (formatters, generators, test fixtures) or where idle files would dirty your status.
+- git_worktree manages shadow worktrees explicitly; every shadow path stays inside the confined dsh-shadow root. Never pass a path outside that root.`,
   })
 
   // ── git_status ────────────────────────────────────────────────────────
@@ -216,7 +240,7 @@ Use the git_* tools for all version-control operations.
       render: (_args, value) => [{ type: 'text', text: value }],
     },
     async execute(args, exec) {
-      if (!args.message?.trim()) throw new Error('message must be a non-empty string')
+      if (!args.message.trim()) throw new Error('message must be a non-empty string')
       const cwd = resolveCwd(args.workdir, exec.agent)
       const argv: string[] = ['commit', `--message=${args.message}`]
       if (args.all) argv.push('--all')
@@ -270,4 +294,9 @@ Use the git_* tools for all version-control operations.
       return terminalResult('git branch', result)
     },
   }))
+
+  // ── git_worktree / git_shadow_run ─────────────────────────────────────
+
+  registerWorktreeTool(ctx, caps)
+  registerShadowRunTool(ctx, caps)
 }

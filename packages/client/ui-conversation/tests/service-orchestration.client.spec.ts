@@ -140,6 +140,53 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
+  it('restores file drafts and empty text when the first prompt rejects', async () => {
+    const b = await bench()
+    const textFile = new File(['x = 1'], 'main.py', { type: 'text/x-python' })
+    const draft = b.root.createDraftFiles([textFile])[0]!
+    // Empty-draft + fileIds + plain phase → the facade calls defaultSink
+    // directly, dispensing with the (now-stale) draft text.
+    expect(b.shell.addFiles([draft.id])).toBe(true)
+    b.prompt.mockResolvedValueOnce({
+      ok: false, error: { code: 'internal', message: 'nope', details: {} },
+    } as never)
+    b.shell.submit('queue')
+    await vi.waitFor(() => { expect(b.prompt).toHaveBeenCalled() })
+    await vi.waitFor(() => {
+      expect(b.shell.snapshot.fileIds).toEqual([draft.id])
+    })
+    expect(b.shell.snapshot.phase).toBe('plain')
+    await b.runtime.dispose()
+  })
+
+  it('prunes and restores file drafts through the facade actions', async () => {
+    const b = await bench()
+    const textFile = new File(['x = 1'], 'main.py', { type: 'text/x-python' })
+    const draft = b.scoped.createDraftFiles([textFile])[0]!
+    b.shell.actions.addFiles([draft.id])
+    expect(b.shell.snapshot.fileIds).toEqual([draft.id])
+    // pruneFiles drops ids the browser no longer owns; restoreFiles re-adds
+    // ids that failed admission before later files were appended.
+    b.shell.actions.pruneFiles([])
+    expect(b.shell.snapshot.fileIds).toEqual([])
+    // restoreFiles rides the shell face (the hub's failed-prompt recovery path).
+    b.shell.restoreFiles([draft.id])
+    expect(b.shell.snapshot.fileIds).toEqual([draft.id])
+    await b.runtime.dispose()
+  })
+
+  it('releases draft files through the scope teardown', async () => {
+    const b = await bench()
+    const textFile = new File(['x = 1'], 'main.py', { type: 'text/x-python' })
+    const draft = b.scoped.createDraftFiles([textFile])[0]!
+    b.shell.actions.addFiles([draft.id])
+    expect(b.root.draftFiles([draft.id])).toHaveLength(1)
+    await b.runtime.sessions.remove('s1')
+    // The scope teardown releases the draft file from the registry.
+    expect(b.root.draftFiles([draft.id])).toHaveLength(0)
+    await b.runtime.dispose()
+  })
+
   it('invalidates pending historical image loads when the rendered session is released', async () => {
     const read = Promise.withResolvers<Awaited<ReturnType<SessionFace['readAttachment']>>>()
     const b = await bench(() => read.promise)

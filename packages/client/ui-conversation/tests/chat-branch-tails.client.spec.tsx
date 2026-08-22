@@ -250,6 +250,25 @@ describe('MessageItem arms', () => {
     expect(view.queryByRole('button', { name: '在新对话中分支' })).toBeNull()
   })
 
+  it('user bubbles render text-file blocks as file chips with name and media type', () => {
+    const view = render(
+      <MessageItem t={t} node={{
+        kind: 'user', seq: 2, time: 1_000,
+        content: [
+          { type: 'text', text: 'see the attachment' },
+          { type: 'text-file', name: 'budget.csv', mediaType: 'text/csv' },
+        ] as never,
+        source: null,
+      }}
+      />,
+    )
+    expect(view.getByText('see the attachment')).toBeTruthy()
+    expect(view.getByText('budget.csv')).toBeTruthy()
+    expect(view.getByText('text/csv')).toBeTruthy()
+    // The file chip is a separate presentation row, not an extra-block JSON dump.
+    expect(view.queryByText(/附加内容块/)).toBeNull()
+  })
+
   it('context uses the Tool calls disclosure chrome and keeps its body collapsed by default', () => {
     const ctxView = render(
       <MessageItem t={t} node={{

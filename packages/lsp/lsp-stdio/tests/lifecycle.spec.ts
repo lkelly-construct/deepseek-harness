@@ -461,6 +461,73 @@ describe('lsp-stdio end to end over a fake server', () => {
   })
 })
 
+describe('lsp-stdio diagnostics (pull and push)', () => {
+  const diagPayload = JSON.stringify([
+    { range: { start: { line: 0, character: 8 }, end: { line: 0, character: 9 } }, severity: 1, code: 'TS2322', message: 'Type \'string\' is not assignable to type \'number\'.' },
+  ])
+
+  it('pulls diagnostics via textDocument/diagnostic when the server advertises diagnosticProvider', async () => {
+    const ctx = await mount({
+      LSP_FAKE_DIAGNOSTIC_PROVIDER: '1',
+      LSP_FAKE_DIAG: diagPayload,
+    })
+    expect(await ctx.lsp.query({ ...query('diagnostics'), position: { line: 0, character: 0 } })).toEqual({
+      kind: 'diagnostics',
+      diagnostics: [
+        {
+          severity: 1,
+          code: 'TS2322',
+          message: 'Type \'string\' is not assignable to type \'number\'.',
+          range: { start: { line: 0, character: 8 }, end: { line: 0, character: 9 } },
+        },
+      ],
+      resolvedWorkspaceUri: pathToFileURL(ws).href,
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('falls back to buffered publishDiagnostics on a push-only server', async () => {
+    // No LSP_FAKE_DIAGNOSTIC_PROVIDER: the fixture is push-only and answers the diagnostic
+    // request with null; the client must not send the request at all.
+    const ctx = await mount({ LSP_FAKE_PUSH_DIAG: '1' })
+    expect(await ctx.lsp.query({ ...query('diagnostics'), position: { line: 0, character: 0 } })).toEqual({
+      kind: 'diagnostics',
+      diagnostics: [
+        {
+          severity: 2,
+          code: 'P1',
+          message: 'pushed warning',
+          range: { start: { line: 1, character: 0 }, end: { line: 1, character: 5 } },
+        },
+      ],
+      resolvedWorkspaceUri: pathToFileURL(ws).href,
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('yields an empty result when a push-only server never publishes', async () => {
+    // killGraceMs bounds the freshness wait; a server that stays silent yields [] rather than hang.
+    const ctx = await mount({}, { killGraceMs: 100 })
+    expect(await ctx.lsp.query({ ...query('diagnostics'), position: { line: 0, character: 0 } })).toEqual({
+      kind: 'diagnostics',
+      diagnostics: [],
+      resolvedWorkspaceUri: pathToFileURL(ws).href,
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('pulls an empty result when the server advertises pull but returns null', async () => {
+    // null payload → normalizeDiagnostics(null) → []; the message is: pull works with no entries.
+    const ctx = await mount({ LSP_FAKE_DIAGNOSTIC_PROVIDER: '1', LSP_FAKE_DIAG: 'null' })
+    expect(await ctx.lsp.query({ ...query('diagnostics'), position: { line: 0, character: 0 } })).toEqual({
+      kind: 'diagnostics',
+      diagnostics: [],
+      resolvedWorkspaceUri: pathToFileURL(ws).href,
+    })
+    await ctx.fiber.dispose()
+  })
+})
+
 /** Read the fixture's JSON-lines didOpen marker, returning no entries before it exists. */
 async function markerLines(path: string): Promise<string[]> {
   try {

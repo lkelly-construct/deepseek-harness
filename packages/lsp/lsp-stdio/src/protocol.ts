@@ -1,8 +1,8 @@
 /**
- * The subset of LSP wire types this generic host reads and writes: initialize capabilities, the four
- * request results (`Location`, `LocationLink`, `Hover`), and the `textDocumentSync` shapes used to
- * decide transient-open support. Types only. Fields absent from a real server payload stay optional;
- * the translation layer normalizes them into the seam's closed unions.
+ * The subset of LSP wire types this generic host reads and writes: initialize capabilities, the five
+ * request results (`Location`, `LocationLink`, `Hover`, `Diagnostic`), and the `textDocumentSync`
+ * shapes used to decide transient-open support. Types only. Fields absent from a real server payload
+ * stay optional; the translation layer normalizes them into the seam's closed unions.
  * @module @deepseek-ai/dsh-lsp-stdio/protocol
  */
 
@@ -52,6 +52,14 @@ export interface WireHover {
   readonly range?: WireRange
 }
 
+/** A `Diagnostic`: severity, optional code, message, and range (`code` may be string or number on the wire). */
+export interface WireDiagnostic {
+  readonly severity?: number
+  readonly code?: string | number
+  readonly message: string
+  readonly range: WireRange
+}
+
 /** The legacy enum form of `textDocumentSync` (`0` None, `1` Full, `2` Incremental). */
 export type WireTextDocumentSyncKind = 0 | 1 | 2
 
@@ -72,6 +80,8 @@ export interface WireServerCapabilities {
   readonly referencesProvider?: WireProviderCapability
   readonly implementationProvider?: WireProviderCapability
   readonly hoverProvider?: WireProviderCapability
+  /** LSP 3.17 pull diagnostics: `true` or a `DiagnosticOptions` object. Absent means push-only. */
+  readonly diagnosticProvider?: WireProviderCapability
 }
 
 /** The `initialize` result envelope. */

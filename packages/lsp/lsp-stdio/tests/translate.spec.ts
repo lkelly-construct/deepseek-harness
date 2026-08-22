@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   negotiatePositionEncoding,
+  normalizeDiagnostics,
   normalizeHover,
   normalizeLocations,
+  normalizePublishedDiagnostics,
   requestMethod,
   supportsOperation,
   supportsTransientOpen,
@@ -17,6 +19,7 @@ describe('requestMethod', () => {
     expect(requestMethod('findReferences')).toBe('textDocument/references')
     expect(requestMethod('goToImplementation')).toBe('textDocument/implementation')
     expect(requestMethod('hover')).toBe('textDocument/hover')
+    expect(requestMethod('diagnostics')).toBe('textDocument/diagnostic')
   })
 })
 
@@ -26,11 +29,14 @@ describe('supportsOperation', () => {
       definitionProvider: true,
       referencesProvider: { workDoneProgress: true },
       implementationProvider: false,
+      diagnosticProvider: { workDoneProgress: false },
     }
     expect(supportsOperation(caps, 'goToDefinition')).toBe(true)
     expect(supportsOperation(caps, 'findReferences')).toBe(true)
     expect(supportsOperation(caps, 'goToImplementation')).toBe(false)
     expect(supportsOperation(caps, 'hover')).toBe(false)
+    expect(supportsOperation(caps, 'diagnostics')).toBe(true)
+    expect(supportsOperation({}, 'diagnostics')).toBe(false)
   })
 })
 
@@ -169,5 +175,60 @@ describe('normalizeHover', () => {
   it('rejects a malformed range instead of silently dropping it', () => {
     expect(() => normalizeHover({ contents: 'x', range: { start: { line: 1 } } }))
       .toThrow(expect.objectContaining({ code: 'LSP_MALFORMED_RESPONSE' }))
+  })
+})
+
+describe('normalizeDiagnostics', () => {
+  it('returns empty only for the protocol no-result value null', () => {
+    expect(normalizeDiagnostics(null)).toEqual([])
+    expect(() => normalizeDiagnostics(undefined)).toThrow(expect.objectContaining({ code: 'LSP_MALFORMED_RESPONSE' }))
+  })
+
+  it('maps severity/code/message/range with a string code', () => {
+    expect(normalizeDiagnostics([{ range: RANGE, severity: 2, code: 'TS2304', message: 'x' }]))
+      .toEqual([{ severity: 2, code: 'TS2304', message: 'x', range: RANGE }])
+  })
+
+  it('stringifies a numeric code and defaults an omitted severity to error (1)', () => {
+    expect(normalizeDiagnostics([{ range: RANGE, code: 1002, message: 'y' }]))
+      .toEqual([{ severity: 1, code: '1002', message: 'y', range: RANGE }])
+  })
+
+  it('drops a non-string/non-number code', () => {
+    expect(normalizeDiagnostics([{ range: RANGE, severity: 4, code: { weird: true }, message: 'z' }]))
+      .toEqual([{ severity: 4, message: 'z', range: RANGE }])
+  })
+
+  it('accepts every severity 1-4 and rejects anything else', () => {
+    const base = { range: RANGE, message: 'm' }
+    const all = [1, 2, 3, 4].map(severity => ({ ...base, severity }))
+    expect(normalizeDiagnostics(all)).toHaveLength(4)
+    expect(() => normalizeDiagnostics([{ ...base, severity: 5 }])).toThrow(/severity/)
+    expect(() => normalizeDiagnostics([{ ...base, severity: 'warn' }])).toThrow(/severity/)
+  })
+
+  it('rejects a missing message and a malformed range', () => {
+    expect(() => normalizeDiagnostics([{ range: RANGE }])).toThrow(/message/)
+    expect(() => normalizeDiagnostics([{ message: 'm', range: { start: { line: 1 } } }])).toThrow(/range/)
+  })
+
+  it('rejects a non-array payload', () => {
+    expect(() => normalizeDiagnostics({ diagnostics: [] })).toThrow(/not an array/)
+  })
+
+  it('rejects a non-object entry', () => {
+    expect(() => normalizeDiagnostics([42])).toThrow(/non-object/)
+  })
+})
+
+describe('normalizePublishedDiagnostics', () => {
+  it('extracts the diagnostics array from publishDiagnostics params', () => {
+    expect(normalizePublishedDiagnostics({ uri: 'file:///a', diagnostics: [{ range: RANGE, severity: 2, message: 'p' }] }))
+      .toEqual([{ severity: 2, message: 'p', range: RANGE }])
+  })
+
+  it('rejects non-object params and a malformed diagnostics array', () => {
+    expect(() => normalizePublishedDiagnostics(null)).toThrow(expect.objectContaining({ code: 'LSP_MALFORMED_RESPONSE' }))
+    expect(() => normalizePublishedDiagnostics({ uri: 'file:///a' })).toThrow(expect.objectContaining({ code: 'LSP_MALFORMED_RESPONSE' }))
   })
 })

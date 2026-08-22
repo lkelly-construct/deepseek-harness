@@ -598,4 +598,39 @@ describe('Web session model selection', () => {
       .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' })
     await ctx.fiber.dispose()
   })
+
+  it('clears a stale manual override when the loop logs a changed request header', async () => {
+    const { ctx, session, sessionId } = await harness()
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+
+    // User manually switches to the vision model; the picker shows it.
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner',
+    })))
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'high' })
+
+    // The image-router unwinds back to the base route: the loop logs the
+    // applied flash config as a request/header change. The picker must follow
+    // the route instead of keeping the stale vision override.
+    session.append('request/header', {
+      header: { config: { provider: 'deepseek-official', model: 'deepseek-chat' } },
+      reason: 'change',
+    })
+
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat' })
+
+    // A subsequent manual switch starts from the base route (no stale image
+    // model), so selecting a text model succeeds without the image conflict.
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-chat',
+    })))
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' })
+    await ctx.fiber.dispose()
+  })
 })

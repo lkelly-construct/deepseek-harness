@@ -1187,7 +1187,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const { provider, model } = defaults.defaultModelSelection()
     return { provider, model }
   }
-  type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
+  type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; reset: () => void }
+  /** Live refs keyed by agent; a route change rebuilds the next read from the log. */
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
   /**
    * Explicit per-session model selections, keyed by session id so they outlive
@@ -1259,6 +1260,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       set current(next: ModelSelection) {
         picked = next
         sessionModelOverrides.set(agent.session.id, next)
+      },
+      reset(): void {
+        picked = undefined
+        sessionModelOverrides.delete(agent.session.id)
       },
       assembled: undefined,
     }
@@ -1452,10 +1457,24 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
 
   ctx.on('session/event', (session, event) => {
-    if (event.type !== 'agent/inbox/spliced') return
-    const agent = ctx.agents.get(session.id)
-    if (agent?.session !== session) return
-    broadcast({ type: 'session/queue', sessionId: session.id, items: queueItems(agent, event.data) })
+    if (event.type === 'agent/inbox/spliced') {
+      const agent = ctx.agents.get(session.id)
+      if (agent?.session !== session) return
+      broadcast({ type: 'session/queue', sessionId: session.id, items: queueItems(agent, event.data) })
+      return
+    }
+    // The picker follows the route actually applied: when the loop logs a new
+    // request/header (the image-router unwound back to the base route, or any
+    // other applied change), drop any stale manual override so selectionFor
+    // reads the logged header. Without this, a one-off switch to the vision
+    // model stays sticky in sessionModelOverrides and the picker shows it even
+    // after the session returned to its base route.
+    if (event.type === 'request/header' && event.data.reason === 'change') {
+      const agent = ctx.agents.get(session.id)
+      if (agent !== undefined && agent.session === session) {
+        selectionFor(agent).reset()
+      }
+    }
   })
 
   /** Remove a wait before settling it: synchronous deletion makes the first claimant win. */

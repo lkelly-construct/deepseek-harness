@@ -131,6 +131,15 @@
   padding: 4px 12px 0;
 }
 
+/* Text/PDF file chips stack under the image rail with the same card padding. */
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 12px 0;
+}
+
 /* Floating overlay anchor (menu / popupSelect shell): entries position
    themselves against the card (bottom: 100% + gap); closed entries render null. */
 .overlayAnchor {

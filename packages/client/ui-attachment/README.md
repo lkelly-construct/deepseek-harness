@@ -1,6 +1,6 @@
 # @deepseek-ai/dsh-client-ui-attachment
 
-Pure React attachment atoms (zero cordis): the composer draft-image rail (`AttachmentRail`), the chat-history image gallery (`MessageImage`/`ImageGallery`), the original-image lightbox (`ImageLightbox`), and the full-page drop overlay (`DropOverlay`). Every string arrives through label props resolved by the owning plugin's own locale namespace, and nothing here reads application state; `@deepseek-ai/dsh-client-ui-conversation` is the current consumer, bridging its `conversation` dictionary through its `image-labels` module.
+Pure React attachment atoms (zero cordis): the composer draft-image rail (`AttachmentRail`), the chat-history image gallery (`MessageImage`/`ImageGallery`), the original-image lightbox (`ImageLightbox`), the full-page drop overlay (`DropOverlay`), and the text/PDF file chip (`TextFileChip`). Every string arrives through label props resolved by the owning plugin's own locale namespace, and nothing here reads application state; `@deepseek-ai/dsh-client-ui-conversation` is the current consumer, bridging its `conversation` dictionary through its `image-labels` module.
 
 ## Attachment rail
 
@@ -14,6 +14,10 @@ Pure React attachment atoms (zero cordis): the composer draft-image rail (`Attac
 
 `DropOverlay` is the full-viewport invitation shown while a file drag is over the page: illustration, title, and a limits line while drops are accepted (`disabled` swaps the blocked illustration and hides the limits line). The layer is pointer-inert — the owner's document-level drag listeners keep the enter/leave count and decide accept/reject; the overlay only shows state. It portals to the body like the lightbox.
 
+## Text-file chip
+
+`TextFileChip` renders one inlined text/PDF attachment as a chip carrying the display name, the browser-declared media type shown as-is, and an owner-formatted human-readable size (`size` is an empty string for history chips, which carry only `name` and `mediaType`); an optional owner-driven remove control renders as a × button only when `onRemove` is present. The composer reads it for each drafted text/PDF file, and chat history renders one per `text-file` content block, in both cases from the block's `name` and `mediaType` alone. The chip exposes no download action.
+
 ## Model Experience
 
 None, as the package renders pure React atoms in the browser; nothing here reaches a model request.
@@ -24,6 +28,7 @@ None; this package neither assembles nor sends a provider request.
 
 ## Known Limitations and Deferred Work
 
-- **Images only** — non-image files have no rail card or history renderer yet; DeepSeek Chat-style file cards and upload-progress states wait until the composer accepts non-image attachments.
+- **Text/PDF files render as a chip only** — the `TextFileChip` shows the filename, media type, and size (images keep their existing rail card and history gallery), with no download or original-bytes access.
+- **No original-file download** — the chip carries no action to fetch the source file; the original bytes are extracted to text and not retained, so downloading the original is deferred work.
 - **No zoom or download in the lightbox** — the preview renders the original at fit-to-viewport size only.
 - **The lightbox does not trap focus** — it sets `aria-modal` and restores focus on close, but Tab can reach the page behind it (behavior carried over from the pre-package component).

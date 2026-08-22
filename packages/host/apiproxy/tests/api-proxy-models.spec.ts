@@ -17,7 +17,7 @@ import type {
   UserMessage,
 } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import type { RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api/rpc'
@@ -80,7 +80,9 @@ async function harness(logged?: {
 }): Promise<{
   ctx: Context
   agent: Agent
+  session: Session
   sessionId: SessionId
+  deregister: () => void
 }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
@@ -112,8 +114,8 @@ async function harness(logged?: {
     ctx,
     inbox: { nextTurn: [], nextStep: [] },
   } as unknown as Agent
-  ctx.agents.register(agent)
-  return { ctx, agent, sessionId: session.id }
+  const deregister = ctx.agents.register(agent)
+  return { ctx, agent, session, sessionId: session.id, deregister }
 }
 
 function expectValue<T>(response: { result: { ok: true; value: T } | { ok: false } }): T {
@@ -564,6 +566,36 @@ describe('Web session model selection', () => {
     expect(catalog.current).toEqual({ provider: 'deleted-gateway', model: 'deleted-model' })
     expect(catalog.groups.flatMap(group => group.models.map(model => `${group.id}/${model.id}`)))
       .not.toContain('deleted-gateway/deleted-model')
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps an explicit switch when the same session renews its agent', async () => {
+    const { ctx, session, sessionId, deregister } = await harness({
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    expectValue(await api.sessions.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-chat',
+    })))
+
+    // Agent renewal (idle drop + resume): the fresh selection ref starts with
+    // no in-process override, so without a session-keyed switch it would fall
+    // back to the logged request header (deepseek-reasoner) and stay stuck.
+    deregister()
+    ctx.agents.register({
+      id: sessionId,
+      session,
+      status: 'running',
+      ctx,
+      inbox: { nextTurn: [], nextStep: [] },
+    } as unknown as Agent)
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' })
     await ctx.fiber.dispose()
   })
 })

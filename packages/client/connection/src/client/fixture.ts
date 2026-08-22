@@ -2414,6 +2414,18 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const userText = content.map(b => (b.type === 'text' ? b.text : '')).join('')
         const durable: ContentBlock[] = content.map((block) => {
           if (block.type === 'text') return block
+          if (block.type === 'text-file') return block
+          if (block.type === 'file') {
+            // The host extracts PDF text into a durable text-file block; this
+            // fixture carries no pdfjs, so it mirrors the durable shape with a
+            // stable placeholder (client tests only need the block to round-trip).
+            return {
+              type: 'text-file' as const,
+              name: block.name,
+              mediaType: block.mediaType,
+              text: '(fixture: pdf text extraction is not run in the connection fixture)',
+            }
+          }
           const attachment: ImageAttachmentRef = {
             attachmentId: `fixture:${randomUuid()}` as AttachmentIdType,
             mediaType: block.mediaType,

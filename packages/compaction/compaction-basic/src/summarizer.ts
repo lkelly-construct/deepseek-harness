@@ -213,6 +213,11 @@ function finishError(finish: FinishReason): Error | undefined {
   }
 }
 
+/** Inline one text-file block's extracted text, prefixed by its display name. */
+function textFileText(block: { name: string; text: string }): string {
+  return `[file: ${block.name}]\n${block.text}`
+}
+
 /** Reject visual output and keep only text before synthesizing a user message. */
 function summaryText(
   blocks: readonly ContentBlock[],
@@ -220,5 +225,7 @@ function summaryText(
   if (contentHasImage(blocks)) {
     throw new LlmError('compaction summary cannot contain image output', 'UNSUPPORTED_CONTENT')
   }
-  return blocks.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text')
+  return blocks
+    .filter(block => block.type === 'text' || block.type === 'text-file')
+    .map(block => ({ type: 'text', text: block.type === 'text' ? block.text : textFileText(block) }))
 }

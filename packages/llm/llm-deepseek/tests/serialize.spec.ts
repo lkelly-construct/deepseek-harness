@@ -133,6 +133,19 @@ describe('serializeMessages', () => {
     expect(wire).toEqual([{ role: 'user', content: 'see chart' }])
   })
 
+  it('inlines text-file blocks as name-prefixed text', () => {
+    const wire = serializeMessages([
+      createUserMessage({
+        content: [
+          { type: 'text', text: 'review ' },
+          { type: 'text-file', name: 'main.py', mediaType: 'text/x-python', text: 'print(1)' },
+        ],
+        source: { kind: 'plugin', plugin: 'test' },
+      }),
+    ])
+    expect(wire).toEqual([{ role: 'user', content: 'review [file: main.py]\nprint(1)' }])
+  })
+
   it('rejects image blocks instead of silently flattening them away', () => {
     expect(() => serializeMessages([createUserMessage({
       content: [{

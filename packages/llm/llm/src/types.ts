@@ -74,6 +74,22 @@ export interface ImageBlock {
   attachment: ImageAttachmentRef
 }
 
+/**
+ * Extracted UTF-8 text of one text-ish file attachment, inlined into the
+ * message so adapters can send it without a transient attachment store. The
+ * original file bytes are not retained; adapters render this block as inline
+ * text prefixed by `name`.
+ */
+export interface TextFileBlock {
+  type: 'text-file'
+  /** Browser/display name; never interpreted as a filesystem path. */
+  name: string
+  /** Caller-declared media type, validated against the host allow-list at admission. */
+  mediaType: string
+  /** The extracted file text the model reads inline. */
+  text: string
+}
+
 /** A tool invocation requested by the model. */
 export interface ToolCallBlock {
   type: 'tool-call'
@@ -100,6 +116,7 @@ export interface ContentBlockMap {
   'text': TextBlock
   'reasoning': ReasoningBlock
   'image': ImageBlock
+  'text-file': TextFileBlock
   'tool-call': ToolCallBlock
   'tool-result': ToolResultBlock
 }

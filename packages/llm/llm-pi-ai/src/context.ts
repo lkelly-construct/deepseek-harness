@@ -10,20 +10,27 @@ import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { Context as PiContext, ImageContent, Message as PiMessage, TextContent, Tool as PiTool } from '@earendil-works/pi-ai'
 import { toPiAssistant } from './replay.ts'
 
-/** Join the text blocks of a harness message. */
+/** Inline one text-file block's extracted text, prefixed by its display name. */
+function textFileText(block: { name: string; text: string }): string {
+  return `[file: ${block.name}]\n${block.text}`
+}
+
+/** Join the text blocks of a harness message (inlined text files included). */
 function flattenText(message: Message): string {
   return message.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
+    .map(block => block.type === 'text'
+      ? block.text
+      : block.type === 'text-file' ? textFileText(block) : '')
     .join('')
 }
 
 
-/** Flatten text recursively inside one tool result. */
+/** Flatten text recursively inside one tool result (inlined text files included). */
 function toolResultText(blocks: readonly ContentBlock[]): string {
   return blocks.map(block => block.type === 'text'
     ? block.text
-    : block.type === 'tool-result' ? toolResultText(block.content) : '').join('')
+    : block.type === 'text-file' ? textFileText(block)
+      : block.type === 'tool-result' ? toolResultText(block.content) : '').join('')
 }
 
 async function userContent(
@@ -35,6 +42,9 @@ async function userContent(
     switch (block.type) {
       case 'text':
         if (block.text.length > 0) content.push({ type: 'text', text: block.text })
+        break
+      case 'text-file':
+        content.push({ type: 'text', text: textFileText(block) })
         break
       case 'image': {
         const stored = await attachments.readImage(block.attachment)

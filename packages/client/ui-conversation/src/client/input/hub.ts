@@ -28,9 +28,11 @@ interface ConversationAttachmentFace {
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
   ): Promise<void>
   releaseDraftImage(id: DraftAttachmentId): void
+  releaseDraftFile(id: DraftAttachmentId): void
 }
 
 /** Session-addressed input facade registry (SessionInputResolver face + composer-layer extras). */
@@ -75,7 +77,7 @@ export class InputHub implements SessionInputResolver {
       inputTriggers: () => this.controller(actx),
       popup: () => this.popup(actx),
       queue: queueReadFaceOf(session),
-      defaultSink: (text, imageIds, mode) => { this.sink(session, text, imageIds, mode) },
+      defaultSink: (text, imageIds, fileIds, mode) => { this.sink(session, text, imageIds, fileIds, mode) },
       steerQueue: () => { void this.steerQueue(session, shell) },
     })
     this.shells.set(id, shell)
@@ -94,11 +96,13 @@ export class InputHub implements SessionInputResolver {
       ]
       return () => {
         for (const off of offs) off()
-        const drafts = shell.snapshot.imageIds
+        const imageDrafts = shell.snapshot.imageIds
+        const fileDrafts = shell.snapshot.fileIds
         shell.dispose()
         this.shells.delete(id)
         const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
-        for (const imageId of drafts) conversation?.releaseDraftImage(imageId)
+        for (const imageId of imageDrafts) conversation?.releaseDraftImage(imageId)
+        for (const fileId of fileDrafts) conversation?.releaseDraftFile(fileId)
       }
     }, 'conversation.input: session shell')
     return shell
@@ -150,20 +154,23 @@ export class InputHub implements SessionInputResolver {
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
   ): void {
-    if (text === '' && imageIds.length === 0) return
+    if (text === '' && imageIds.length === 0 && fileIds.length === 0) return
     const shell = this.shells.get(session.sessionId)
     // Commit, not an editable clear: undo must not resurrect sent content.
-    shell?.commitSend(imageIds)
-    void this.conversation().sendSession(session, text, imageIds, mode).catch(() => {
+    shell?.commitSend(imageIds, fileIds)
+    void this.conversation().sendSession(session, text, imageIds, fileIds, mode).catch(() => {
       if (this.shells.get(session.sessionId) === shell) {
         shell?.restoreImages(imageIds)
+        shell?.restoreFiles(fileIds)
         if (shell?.snapshot.draft === '') shell.setDraft(text)
         return
       }
       const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
       for (const id of imageIds) conversation?.releaseDraftImage(id)
+      for (const id of fileIds) conversation?.releaseDraftFile(id)
     })
   }
 

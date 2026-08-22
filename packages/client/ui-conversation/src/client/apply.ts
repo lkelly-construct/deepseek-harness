@@ -18,7 +18,7 @@ import type {
 } from './contract/slots.ts'
 import type { InputNotice } from './input/contract.ts'
 import { createChatStore } from './stores.ts'
-import { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
+import { ConversationController, UnsupportedFileTypeError, UnsupportedImageMediaTypeError } from './service.ts'
 import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
 import type { ComposerBlock } from './input/blocks.ts'
@@ -217,14 +217,19 @@ export function apply(ctx: Context): void {
           const from = inputHub.shell(sessionId)
           const draft = from.snapshot.draft
           const imageIds = from.snapshot.imageIds
+          const fileIds = from.snapshot.fileIds
           const next = inputHub.shell(nextId)
-          if (imageIds.length === 0 || next.addImages(imageIds)) {
+          if ((imageIds.length === 0 || next.addImages(imageIds))
+            && (fileIds.length === 0 || next.addFiles(fileIds))) {
             if (draft !== '') {
               next.setDraft(draft)
               from.setDraft('')
             }
             if (imageIds.length > 0) {
               for (const id of imageIds) from.removeImage(id)
+            }
+            if (fileIds.length > 0) {
+              for (const id of fileIds) from.removeFile(id)
             }
           }
         }
@@ -292,6 +297,9 @@ export function apply(ctx: Context): void {
           addImages: undefined,
           removeImage: undefined,
           draftImages: undefined,
+          addFiles: undefined,
+          removeFile: undefined,
+          draftFiles: undefined,
           resolveSubmitMode: (running, gesture, steeringAvailable) =>
             submissionPolicy.resolve(running, gesture, steeringAvailable),
           toggleCommandMenu: undefined,
@@ -326,6 +334,25 @@ export function apply(ctx: Context): void {
           shell.removeImage(id)
         },
         draftImages: ids => conversation.draftImages(ids),
+        addFiles: (files) => {
+          try {
+            const attachments = conversation.createDraftFiles(files)
+            if (!shell.addFiles(attachments.map(attachment => attachment.id))) {
+              conversation.releaseDraftFiles(attachments)
+            }
+            return null
+          } catch (error: unknown) {
+            if (error instanceof UnsupportedFileTypeError) {
+              return t('file.unsupportedType')
+            }
+            return error instanceof Error ? error.message : String(error)
+          }
+        },
+        removeFile: (id) => {
+          conversation.releaseDraftFile(id)
+          shell.removeFile(id)
+        },
+        draftFiles: ids => conversation.draftFiles(ids),
         resolveSubmitMode: (running, gesture, steeringAvailable) =>
           submissionPolicy.resolve(running, gesture, steeringAvailable),
         toggleCommandMenu: inputTriggers === undefined

@@ -45,7 +45,7 @@ export const DEFAULT_GRACE_MS = 3_000
 
 /** The stable system-prompt guidance positioning typecheck as the offline fallback. */
 export const TYPECHECK_PROMPT_TEXT =
-  'Use typecheck to run the TypeScript compiler over the project (tsc --noEmit) when no language server reports diagnostics. Pass project when tsconfig.json is not at the session root. The session workspace root is required; results render as diagnostics with error codes.'
+  'Use typecheck to run the TypeScript compiler over the project (tsc --noEmit) when no language server reports diagnostics. When the user reports errors, a broken build, failing tests, or asks you to fix something in a TypeScript project, run typecheck first and enumerate the diagnostics before changing code. Pass project when tsconfig.json is not at the session root. The session workspace root is required; results render as diagnostics with error codes.'
 
 /** Plugin configuration: rendering cap and the timeout budget. */
 export interface Config {

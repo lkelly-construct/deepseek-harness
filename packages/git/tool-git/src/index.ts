@@ -119,6 +119,7 @@ Use the git_* tools for all version-control operations.
 
 - git_shadow_run creates an isolated checkout under <git dir>/dsh-shadow and runs one validation command inside it (typecheck, build, tests), then automatically removes the worktree and its temporary branch. It never touches the main working tree.
 - Use git_shadow_run for commands that mutate a checkout (formatters, generators, test fixtures) or where idle files would dirty your status.
+- When the user asks you to plan, validate, or make broad or risky changes — refactors, renames, big edits — run the change's checks (typecheck, tests, build) inside a git_shadow_run worktree and report the outcome before touching the main working tree. Do not wait for the user to name git_shadow_run; it is how you sandbox a proposed change.
 - git_worktree manages shadow worktrees explicitly; every shadow path stays inside the confined dsh-shadow root. Never pass a path outside that root.`,
   })
 

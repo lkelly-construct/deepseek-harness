@@ -52,11 +52,16 @@ function resolveThinking(options: GenerateOptions, defaults: RequestDefaults): R
   return defaults.thinking === undefined ? {} : { thinking: defaults.thinking }
 }
 
-/** Join the text blocks of a message (used for user/tool-result content). */
+/** Inline one text-file block's extracted text, prefixed by its display name. */
+function textFileText(block: { name: string; text: string }): string {
+  return `[file: ${block.name}]\n${block.text}`
+}
+
+/** Join the text blocks of a message (used for user/tool-result content; inlined text files included). */
 function flattenText(blocks: ContentBlock[]): string {
   return blocks
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
+    .filter(block => block.type === 'text' || block.type === 'text-file')
+    .map(block => block.type === 'text' ? block.text : textFileText(block))
     .join('')
 }
 

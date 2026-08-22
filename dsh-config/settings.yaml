@@ -12,8 +12,6 @@ llm-pi-ai:
       models:
         - id: deepseek/deepseek-v4-flash-0731
           name: DeepSeek V4 Flash 0731
-        - id: deepseek/deepseek-v4-pro-0813
-          name: DeepSeek V4 Pro 0813
         - id: qwen/qwen3-vl-235b-a22b-instruct
           name: Qwen3 VL 235B
           input:
@@ -26,9 +24,9 @@ llm-pi-ai:
 web-search-deepseek:
   apiKeyEnv: DEEPSEEK_API_KEY
 
-# Default model for new sessions: DeepSeek Flash. DeepSeek Pro is a manual
-# per-session pick; image-bearing turns route to Qwen2.5 VL automatically
-# (the dsh-image-router plugin in the base bundle).
+# Default model for new sessions: DeepSeek Flash. DeepSeek V4 Pro 0813 was
+# removed from the model picker; image-bearing turns route to Qwen2.5 VL
+# automatically (the dsh-image-router plugin in the base bundle).
 agent-default-model:
   provider: openrouter
   model: deepseek/deepseek-v4-flash-0731

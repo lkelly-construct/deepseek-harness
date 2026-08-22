@@ -14,7 +14,7 @@ import type { Context } from '@deepseek-ai/cordis'
 // method) instead of the standalone helper.
 import type { ISessions, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
-import type { ComposerAttachment } from './contract/slots.ts'
+import type { ComposerAttachment, ComposerFileAttachment } from './contract/slots.ts'
 import type { QueueAction, QueueItemId } from './contract/queue.ts'
 import type { ComposerBlocks } from './input/blocks.ts'
 import type { DraftAttachmentId, SessionInputResolver } from './input/contract.ts'
@@ -68,6 +68,11 @@ function browserDraftAttachment(file: File): ComposerAttachment {
   }
 }
 
+/** Create one browser-only file draft descriptor; only its id enters input state. */
+function browserDraftFile(file: File): ComposerFileAttachment {
+  return { kind: 'file', id: crypto.randomUUID() as DraftAttachmentId, file }
+}
+
 interface ImageUrlEntry {
   readonly sessionId: SessionId
   readonly generation: number
@@ -87,6 +92,19 @@ export class UnsupportedImageMediaTypeError extends Error {
   }
 }
 
+/** Unsupported browser-declared file type, localized by the UI boundary. */
+export class UnsupportedFileTypeError extends Error {
+  /** Browser-declared MIME value, possibly empty. */
+  readonly mediaType: string
+
+  /** @param mediaType - Browser-declared MIME value, possibly empty. */
+  constructor(mediaType: string) {
+    super(`unsupported file media type: ${mediaType || '(empty)'}`)
+    this.name = 'UnsupportedFileTypeError'
+    this.mediaType = mediaType
+  }
+}
+
 /** Scope-addressed conversation service (root singleton, provided as `conversation`). */
 export class ConversationController extends Service implements IConversation {
   /** The per-session input machine registry (SessionInputResolver face). */
@@ -94,6 +112,7 @@ export class ConversationController extends Service implements IConversation {
   /** The per-session composer-block registry. */
   readonly blocks: ComposerBlocks
   private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
+  private readonly draftFileRegistry = new Map<DraftAttachmentId, ComposerFileAttachment>()
   private readonly imageUrls = new Map<string, ImageUrlEntry>()
   private readonly imageGenerations = new Map<SessionId, number>()
   private readonly createdImageUrls = new Set<string>()
@@ -115,6 +134,7 @@ export class ConversationController extends Service implements IConversation {
       for (const url of this.createdImageUrls) revokePreview(url)
       this.createdImageUrls.clear()
       this.draftAttachments.clear()
+      this.draftFileRegistry.clear()
       this.imageUrls.clear()
       this.imageGenerations.clear()
     }, 'conversation attachment URL cache')
@@ -133,27 +153,35 @@ export class ConversationController extends Service implements IConversation {
   }
 
   /**
-   * Submit ordered draft images with text through one host admission.
+   * Submit ordered draft images and files with text through one host admission.
    * @param session - target session.
    * @param text - serialized prompt text.
-   * @param imageIds - ordered draft-local attachment ids.
+   * @param imageIds - ordered draft-local image ids.
+   * @param fileIds - ordered draft-local file ids.
    * @param mode - queue or steer delivery selected by composer policy.
    */
   async sendSession(
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
+    fileIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
   ): Promise<void> {
     const attachments = this.draftImages(imageIds)
     if (attachments.length !== imageIds.length) {
       throw new Error('conversation.sendSession: one or more draft images are no longer available')
     }
+    const fileAttachments = this.draftFiles(fileIds)
+    if (fileAttachments.length !== fileIds.length) {
+      throw new Error('conversation.sendSession: one or more draft files are no longer available')
+    }
     const uploaded = await this.serializeImages(attachments.map(attachment => attachment.file))
-    const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
+    const uploadedFiles = await this.serializeFiles(fileAttachments.map(attachment => attachment.file))
+    const content = [...uploaded, ...uploadedFiles, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
     const result = await session.prompt(content, mode)
     if (!result.ok) throw new Error(`conversation.send failed: ${result.error.code}: ${result.error.message}`)
     this.releaseDraftImages(attachments)
+    this.releaseDraftFiles(fileAttachments)
   }
 
   /**
@@ -203,6 +231,50 @@ export class ConversationController extends Service implements IConversation {
    */
   releaseDraftImages(attachments: readonly ComposerAttachment[]): void {
     for (const attachment of attachments) this.releaseDraftImage(attachment.id)
+  }
+
+  /**
+   * Create runtime-only draft files after MIME validation (no preview URLs).
+   * @param files - browser files to register after text/PDF allow-list validation.
+   * @returns ordered draft descriptors.
+   */
+  createDraftFiles(files: readonly File[]): readonly ComposerFileAttachment[] {
+    for (const file of files) fileMediaType(file.type)
+    return files.map((file) => {
+      const attachment = browserDraftFile(file)
+      this.draftFileRegistry.set(attachment.id, attachment)
+      return attachment
+    })
+  }
+
+  /**
+   * Resolve ordered input-state ids to runtime-owned draft files.
+   * @param ids - draft file ids.
+   * @returns descriptors that remain live, in requested order.
+   */
+  draftFiles(ids: readonly DraftAttachmentId[]): readonly ComposerFileAttachment[] {
+    const attachments: ComposerFileAttachment[] = []
+    for (const id of ids) {
+      const attachment = this.draftFileRegistry.get(id)
+      if (attachment !== undefined) attachments.push(attachment)
+    }
+    return attachments
+  }
+
+  /**
+   * Release one browser-owned draft file.
+   * @param id - draft file id.
+   */
+  releaseDraftFile(id: DraftAttachmentId): void {
+    this.draftFileRegistry.delete(id)
+  }
+
+  /**
+   * Release a set of browser-owned draft files.
+   * @param attachments - descriptors to release.
+   */
+  releaseDraftFiles(attachments: readonly ComposerFileAttachment[]): void {
+    for (const attachment of attachments) this.releaseDraftFile(attachment.id)
   }
 
   /**
@@ -321,6 +393,61 @@ export class ConversationController extends Service implements IConversation {
       ...(file.name === '' ? {} : { name: file.name }),
     })))
   }
+
+  /**
+   * Convert browser files to canonical prompt parts: text-ish types are read
+   * as UTF-8 into inlined `text-file` parts; `application/pdf` bytes are read
+   * into a base64 `file` part the host admits for PDF extraction.
+   * @param files - draft files to serialize, each already type-validated.
+   */
+  private serializeFiles(files: readonly File[]): Promise<Parameters<SessionFace['prompt']>[0]> {
+    return Promise.all(files.map(async (file) => {
+      const mediaType = fileMediaType(file.type)
+      if (mediaType === PDF_MEDIA_TYPE) {
+        return {
+          type: 'file' as const,
+          mediaType: PDF_MEDIA_TYPE,
+          name: file.name,
+          data: bytesToBase64(new Uint8Array(await file.arrayBuffer())),
+        }
+      }
+      return {
+        type: 'text-file' as const,
+        name: file.name,
+        mediaType,
+        text: await file.text(),
+      }
+    }))
+  }
+}
+
+/** Text-ish media types accepted for inlined text-file drafts (host allow-list mirror). */
+export const TEXT_FILE_MEDIA_TYPES = [
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/xml',
+  'text/x-python',
+  'application/json',
+] as const
+
+/** Media type admitted as a base64 PDF draft. */
+export const PDF_MEDIA_TYPE = 'application/pdf' as const
+
+/** One inlined text-file media type (the `TEXT_FILE_MEDIA_TYPES` members). */
+export type TextFileMediaType = (typeof TEXT_FILE_MEDIA_TYPES)[number]
+
+/**
+ * Classify a browser-declared file type against the text/PDF allow-list.
+ * @param value - browser-declared MIME value, possibly empty.
+ * @returns the canonical media type, or throws {@link UnsupportedFileTypeError}.
+ */
+export function fileMediaType(value: string): TextFileMediaType | typeof PDF_MEDIA_TYPE {
+  if (value === PDF_MEDIA_TYPE) return value
+  for (const mediaType of TEXT_FILE_MEDIA_TYPES) {
+    if (mediaType === value) return mediaType
+  }
+  throw new UnsupportedFileTypeError(value)
 }
 
 function imageMediaType(value: string): ImageMediaType {

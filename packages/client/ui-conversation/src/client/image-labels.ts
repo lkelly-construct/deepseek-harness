@@ -3,7 +3,7 @@
  * application state; owners resolve every string). */
 
 import type {
-  AttachmentRailLabels, DropOverlayLabels, ImageLightboxLabels, MessageImageLabels,
+  AttachmentRailLabels, DropOverlayLabels, ImageLightboxLabels, MessageImageLabels, TextFileChipLabels,
 } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { ImageAttachmentLimits } from '@deepseek-ai/dsh-attachment'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
@@ -16,6 +16,19 @@ import type { ConversationKey } from './locales.ts'
  */
 export function imageSizeText(bytes: number): string {
   const mb = bytes / (1024 * 1024)
+  return `${Number.isInteger(mb) ? String(mb) : mb.toFixed(1)}MB`
+}
+
+/**
+ * Byte count as a human-readable size for a file chip (`340B`, `1.2KB`, `2.5MB`).
+ * @param bytes - the byte count.
+ * @returns the rounded size text.
+ */
+export function fileSizeText(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${Number.isInteger(kb) ? String(kb) : kb.toFixed(1)}KB`
+  const mb = kb / 1024
   return `${Number.isInteger(mb) ? String(mb) : mb.toFixed(1)}MB`
 }
 
@@ -113,4 +126,13 @@ export function attachmentRailLabels(t: Translate<ConversationKey>): AttachmentR
     scrollLeft: t('image.scrollLeft'),
     scrollRight: t('image.scrollRight'),
   }
+}
+
+/**
+ * Resolve the text/PDF file chip strings.
+ * @param t - the conversation-namespace translate.
+ * @returns the chip remove-label resolver.
+ */
+export function textFileChipLabels(t: Translate<ConversationKey>): TextFileChipLabels {
+  return { remove: name => t('file.remove', { name }) }
 }

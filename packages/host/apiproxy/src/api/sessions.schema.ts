@@ -278,10 +278,25 @@ export const imageMediaTypeSchema = z.union([
   z.literal('image/gif'),
 ])
 
+/** Text-ish media types accepted for inlined text-file attachments. */
+export const textFileMediaTypeSchema = z.union([
+  z.literal('application/json'),
+  z.literal('text/plain'),
+  z.literal('text/x-python'),
+  z.literal('text/markdown'),
+  z.literal('text/csv'),
+  z.literal('text/xml'),
+])
+
+/** Media types accepted for host-side PDF extraction (`file` prompt parts). */
+export const pdfFileMediaTypeSchema = z.literal('application/pdf')
+
 /** Prompt wire content is intentionally narrower than merge-extensible durable core content. */
 export const promptContentPartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }),
   z.object({ type: z.literal('image'), mediaType: imageMediaTypeSchema, data: z.string(), name: z.string().optional() }),
+  z.object({ type: z.literal('text-file'), name: z.string().min(1), mediaType: textFileMediaTypeSchema, text: z.string() }),
+  z.object({ type: z.literal('file'), name: z.string().min(1), mediaType: pdfFileMediaTypeSchema, data: z.string().min(1) }),
 ])
 
 /** session.prompt request payload, including optional browser-local request provenance. */

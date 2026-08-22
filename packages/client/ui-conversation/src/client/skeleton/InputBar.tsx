@@ -12,7 +12,7 @@ import clsx from 'clsx'
 import {
   IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { AttachmentRail, DropOverlay, ImageLightbox } from '@deepseek-ai/dsh-client-ui-attachment'
+import { AttachmentRail, DropOverlay, ImageLightbox, TextFileChip } from '@deepseek-ai/dsh-client-ui-attachment'
 import type { AttachmentRailItem } from '@deepseek-ai/dsh-client-ui-attachment'
 // Type-only: the `plan` projection key merge (the TodoDock posture — the
 // composer reads a host-computed value; the domain owns the key).
@@ -24,10 +24,12 @@ import type {} from '@deepseek-ai/dsh-goal/client'
 // api-remotes import already places it in every client program.
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ComposerAttachment, ComposerBarProps } from '../contract/slots.ts'
+import { PDF_MEDIA_TYPE, TEXT_FILE_MEDIA_TYPES } from '../service.ts'
 import { deriveDecorations } from '../input/decorations.ts'
 import type { DraftDecorations } from '../input/decorations.ts'
 import {
-  attachmentErrorText, attachmentRailLabels, dropOverlayLabels, imageSizeText, lightboxLabels,
+  attachmentErrorText, attachmentRailLabels, dropOverlayLabels, fileSizeText, imageSizeText,
+  lightboxLabels, textFileChipLabels,
 } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
@@ -36,6 +38,11 @@ import css from './InputBar.module.css'
 
 /** Decoration product of the no-session state (no machine, empty draft). */
 const INERT_DECORATIONS: DraftDecorations = { token: null, chips: [], textRefs: [], hint: null }
+
+/** Whether a browser-declared MIME type is an attachable text/PDF file (routing only). */
+function isAttachableFileType(type: string): boolean {
+  return type === PDF_MEDIA_TYPE || (TEXT_FILE_MEDIA_TYPES as readonly string[]).includes(type)
+}
 
 /** Rail thumbnail carrying its source attachment for the open/remove callbacks. */
 interface ComposerRailItem extends AttachmentRailItem {
@@ -46,6 +53,7 @@ export type InputBarProps = ComposerBarProps
 
 export function InputBar({
   useSession, useInput, inputActions, keyboard, addImages, removeImage, draftImages,
+  addFiles, removeFile, draftFiles,
   resolveSubmitMode, toggleCommandMenu, stop, command, t,
   renderSlot, useNotices, useLexicon, useMenuLauncher,
   useProjection, sessionId, variant, disabled: inert = false, blocked,
@@ -73,7 +81,11 @@ export function InputBar({
     () => input === undefined || draftImages === undefined ? [] : draftImages(input.imageIds),
     [draftImages, input?.imageIds],
   )
-  const empty = draft.trim() === '' && attachments.length === 0
+  const fileAttachments = useMemo(
+    () => input === undefined || draftFiles === undefined ? [] : draftFiles(input.fileIds),
+    [draftFiles, input?.fileIds],
+  )
+  const empty = draft.trim() === '' && attachments.length === 0 && fileAttachments.length === 0
   const [preview, setPreview] = useState<ComposerAttachment | null>(null)
   const [dragActive, setDragActive] = useState(false)
   // Transient error banner (image-intake rejections and prompt failures): the
@@ -156,6 +168,13 @@ export function InputBar({
       inputActions.pruneImages(attachments.map(attachment => attachment.id))
     }
   }, [attachments, input?.imageIds, inputActions])
+
+  useEffect(() => {
+    if (input === undefined || inputActions === undefined) return
+    if (fileAttachments.length !== input.fileIds.length) {
+      inputActions.pruneFiles(fileAttachments.map(attachment => attachment.id))
+    }
+  }, [fileAttachments, input?.fileIds, inputActions])
 
   // A native Safari edit that shortens the draft may leave the previous
   // soft-wrap layout behind after the mirror shrinks. The native-change signal
@@ -413,7 +432,7 @@ export function InputBar({
       .filter(item => item.kind === 'file')
       .map(item => item.getAsFile())
       .filter((file): file is File => file !== null)
-    if (files.length > 0) intakeImages(files)
+    if (files.length > 0) routeIntake(files)
     const text = e.clipboardData.getData('text/plain')
     if (text === '') {
       if (files.length > 0) e.preventDefault()
@@ -464,6 +483,30 @@ export function InputBar({
     if (rejected !== null) showToast(rejected)
   }, [addImages, attachments, imageLimits, showToast, t])
 
+  // Text/PDF file intake: the batch is handed to addFiles, which validates
+  // each type against the text/PDF allow-list and returns localized copy for
+  // a rejected batch (or null on success). No limits pre-check: the host
+  // enforces file admission at submit.
+  const intakeFiles = useCallback((files: readonly File[]): void => {
+    if (addFiles === undefined || files.length === 0) return
+    const rejected = addFiles(files)
+    if (rejected !== null) showToast(rejected)
+  }, [addFiles, showToast])
+
+  // Route picked/dropped files by MIME type: text-ish/PDF files go to the
+  // files path, everything else (images and unsupported junk) keeps the image
+  // path, whose own validation rejects what is not an image.
+  const routeIntake = useCallback((files: readonly File[]): void => {
+    const docs: File[] = []
+    const images: File[] = []
+    for (const file of files) {
+      if (isAttachableFileType(file.type)) docs.push(file)
+      else images.push(file)
+    }
+    if (docs.length > 0) intakeFiles(docs)
+    if (images.length > 0) intakeImages(images)
+  }, [intakeFiles, intakeImages])
+
   // Whole-page file-drop intake (DeepSeek Chat behavior): the listeners live
   // on the document so a drop anywhere over the window adds images, not only
   // over the composer card. Safe as document-level state: the composer-bar
@@ -471,7 +514,7 @@ export function InputBar({
   // Text drags carry no 'Files' type and pass through untouched, keeping the
   // native drop-text-into-textarea path. The overlay layer itself is
   // pointer-inert, so it never disturbs the enter/leave count.
-  const canAcceptDrop = !locked && !machineBusy && addImages !== undefined
+  const canAcceptDrop = !locked && !machineBusy && (addImages !== undefined || addFiles !== undefined)
   useEffect(() => {
     const hasFiles = (event: globalThis.DragEvent): boolean =>
       event.dataTransfer?.types.includes('Files') ?? false
@@ -505,7 +548,7 @@ export function InputBar({
       event.preventDefault()
       reset()
       if (!canAcceptDrop) return
-      intakeImages([...(event.dataTransfer?.files ?? [])])
+      routeIntake([...(event.dataTransfer?.files ?? [])])
     }
     document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
@@ -519,7 +562,7 @@ export function InputBar({
       document.removeEventListener('drop', onDrop)
       window.removeEventListener('dragend', reset)
     }
-  }, [canAcceptDrop, intakeImages])
+  }, [canAcceptDrop, routeIntake])
 
   const closePreview = useCallback(() => { setPreview(null) }, [])
 
@@ -700,6 +743,20 @@ export function InputBar({
               onOpen={(item) => { setPreview(item.attachment) }}
               onRemove={(item) => { removeImage?.(item.attachment.id) }}
             />
+          </div>
+        )}
+        {fileAttachments.length > 0 && (
+          <div className={css.files} role="group" aria-label={t('file.label')}>
+            {fileAttachments.map(attachment => (
+              <TextFileChip
+                key={attachment.id}
+                name={attachment.file.name || t('file.label')}
+                mediaType={attachment.file.type}
+                size={fileSizeText(attachment.file.size)}
+                removeLabel={textFileChipLabels(t).remove(attachment.file.name)}
+                onRemove={() => { removeFile?.(attachment.id) }}
+              />
+            ))}
           </div>
         )}
         {/* One scrollport, two text layers. The hidden mirror renders draft+'\n' and stretches the

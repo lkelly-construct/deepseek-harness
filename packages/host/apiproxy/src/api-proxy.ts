@@ -109,6 +109,7 @@ import {
   inspectApiRemoteSession,
 } from '@deepseek-ai/dsh-api-remotes'
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
+import { extractPdfText, InvalidPdfError } from './pdf-text.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -124,6 +125,36 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
+/**
+ * Default cap on the UTF-8 byte length of one inlined text-file attachment's
+ * text. The file bytes never reach the host; the browser uploads only the
+ * extracted text, so this bounds what one prompt can inline.
+ */
+export const DEFAULT_MAX_TEXT_FILE_BYTES = 512_000
+/** Default cap on the number of inlined text files accepted in one prompt. */
+export const DEFAULT_MAX_TEXT_FILES_PER_MESSAGE = 10
+/** Text-ish media types accepted for inlined text-file attachments. */
+const TEXT_FILE_MEDIA_TYPES: readonly string[] = Object.freeze([
+  'application/json',
+  'text/plain',
+  'text/x-python',
+  'text/markdown',
+  'text/csv',
+  'text/xml',
+])
+
+/** Default cap on the byte length of one inlined PDF attachment. */
+export const DEFAULT_MAX_PDF_BYTES = 20 * 1024 * 1024
+/** Default cap on the number of PDF files accepted in one prompt. */
+export const DEFAULT_MAX_PDF_FILES_PER_MESSAGE = 5
+/** Media types accepted for host-side PDF extraction. */
+const PDF_MEDIA_TYPES: readonly string[] = Object.freeze(['application/pdf'])
+/**
+ * Stable text emitted for a PDF whose pages yield no extractable text (an
+ * image-only or scanned document), so the attachment is never silently empty.
+ */
+export const EMPTY_PDF_TEXT_PLACEHOLDER = '(no extractable text — image-only or scanned PDF)'
+
 /** Decode the browser payload while rejecting non-canonical base64 forms. */
 function decodeBase64(data: string): Uint8Array {
   const decoded = Buffer.from(data, 'base64')
@@ -133,31 +164,104 @@ function decodeBase64(data: string): Uint8Array {
   return new Uint8Array(decoded)
 }
 
+/** Reject one inlined text-file part that exceeds an admission cap or allow-list. */
+function assertTextFileAdmitted(part: Extract<PromptContentPart, { type: 'text-file' }>): void {
+  if (!TEXT_FILE_MEDIA_TYPES.includes(part.mediaType)) {
+    throw new AttachmentError(`File type ${part.mediaType} is not accepted by this deployment.`, 'UNSUPPORTED_FILE_TYPE')
+  }
+  if (Buffer.byteLength(part.text, 'utf8') > DEFAULT_MAX_TEXT_FILE_BYTES) {
+    throw new AttachmentError('Inlined file text exceeds the configured per-file byte limit.', 'FILE_TOO_LARGE')
+  }
+}
+
+/** Decode and admit one PDF file part, returning its decoded bytes. */
+function decodePdf(part: Extract<PromptContentPart, { type: 'file' }>): Uint8Array {
+  if (!PDF_MEDIA_TYPES.includes(part.mediaType)) {
+    throw new AttachmentError(`File type ${part.mediaType} is not accepted by this deployment.`, 'UNSUPPORTED_FILE_TYPE')
+  }
+  const decoded = Buffer.from(part.data, 'base64')
+  if (part.data.length === 0 || decoded.toString('base64') !== part.data) {
+    throw new AttachmentError('PDF upload is not canonical base64.', 'INVALID_PDF')
+  }
+  if (decoded.length > DEFAULT_MAX_PDF_BYTES) {
+    throw new AttachmentError('PDF file exceeds the configured per-file byte limit.', 'FILE_TOO_LARGE')
+  }
+  return new Uint8Array(decoded)
+}
+
+/** Extract one PDF file part to its inline text, or the empty-document placeholder. */
+async function extractPdfTextPart(part: Extract<PromptContentPart, { type: 'file' }>): Promise<string> {
+  const bytes = decodePdf(part)
+  const text = await extractPdfText(bytes).catch((error: unknown) => {
+    if (error instanceof InvalidPdfError) {
+      throw new AttachmentError('PDF upload is not a valid PDF document.', 'INVALID_PDF', { cause: error })
+    }
+    throw error
+  })
+  return text === '' ? EMPTY_PDF_TEXT_PLACEHOLDER : text
+}
+
+/** One prompt part prepared for durable publication: images carry decoded bytes, plain parts stay as-is. */
+type PreparedPart =
+  | { image: Extract<PromptContentPart, { type: 'image' }>; data: Uint8Array }
+  | Extract<PromptContentPart, { type: 'text' }>
+  | Extract<PromptContentPart, { type: 'text-file' }>
+  | Extract<PromptContentPart, { type: 'file' }>
+
 /** Validate one prompt as a batch before publishing any durable image object. */
 async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
   if (content.every(part => part.type === 'text')) {
     return content.map(part => ({ type: 'text', text: part.text }))
   }
-  const prepared = content.map(part => part.type === 'text'
-    ? part
-    : { part, data: decodeBase64(part.data) })
-  const images = prepared.filter((part): part is Extract<typeof part, { data: Uint8Array }> => 'data' in part)
-  const refs = await ctx.attachments.saveImages(images.map(image => ({
-    data: image.data,
-    mediaType: image.part.mediaType,
-    ...image.part.name === undefined ? {} : { name: image.part.name },
-  })))
+  const textFiles = content.filter((part): part is Extract<PromptContentPart, { type: 'text-file' }> => part.type === 'text-file')
+  if (textFiles.length > DEFAULT_MAX_TEXT_FILES_PER_MESSAGE) {
+    throw new AttachmentError('File batch exceeds the configured per-message file-count limit.', 'TOO_MANY_FILES')
+  }
+  for (const file of textFiles) assertTextFileAdmitted(file)
+
+  const pdfFiles = content.filter((part): part is Extract<PromptContentPart, { type: 'file' }> => part.type === 'file')
+  if (pdfFiles.length > DEFAULT_MAX_PDF_FILES_PER_MESSAGE) {
+    throw new AttachmentError('PDF batch exceeds the configured per-message file-count limit.', 'TOO_MANY_FILES')
+  }
+  // Validate and extract every PDF before any durable image object is
+  // published, so a batch admission failure leaves no partial state.
+  const pdfTexts: string[] = []
+  for (const file of pdfFiles) pdfTexts.push(await extractPdfTextPart(file))
+
+  const prepared: PreparedPart[] = content.map(part => part.type === 'image'
+    ? { image: part, data: decodeBase64(part.data) }
+    : part)
+  const images = prepared.filter((part): part is Extract<PreparedPart, { image: unknown }> => 'image' in part)
+  const refs = images.length === 0
+    ? []
+    : await ctx.attachments.saveImages(images.map(image => ({
+      data: image.data,
+      mediaType: image.image.mediaType,
+      ...image.image.name === undefined ? {} : { name: image.image.name },
+    })))
   const blocks: ContentBlock[] = []
   let imageIndex = 0
+  let pdfIndex = 0
   for (const item of prepared) {
-    if (!('data' in item)) {
+    if ('image' in item) {
+      const attachment = refs[imageIndex++]
+      /* v8 ignore next -- each prepared image supplied exactly one saveImages input and therefore one ordered ref. */
+      if (attachment === undefined) throw new Error('attachment batch result did not preserve input cardinality')
+      blocks.push({ type: 'image', attachment })
+      continue
+    }
+    if (item.type === 'text') {
       blocks.push({ type: 'text', text: item.text })
       continue
     }
-    const attachment = refs[imageIndex++]
-    /* v8 ignore next -- each prepared image supplied exactly one saveImages input and therefore one ordered ref. */
-    if (attachment === undefined) throw new Error('attachment batch result did not preserve input cardinality')
-    blocks.push({ type: 'image', attachment })
+    if (item.type === 'file') {
+      const text = pdfTexts[pdfIndex++]
+      /* v8 ignore next -- each prepared file part supplied exactly one extractPdfTextPart result. */
+      if (text === undefined) throw new Error('pdf batch result did not preserve input cardinality')
+      blocks.push({ type: 'text-file', name: item.name, mediaType: item.mediaType, text })
+      continue
+    }
+    blocks.push({ type: 'text-file', name: item.name, mediaType: item.mediaType, text: item.text })
   }
   return blocks
 }
@@ -1086,6 +1190,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
   /**
+   * Explicit per-session model selections, keyed by session id so they outlive
+   * any single Agent: `selectModel` records the switched model here in addition
+   * to the live agent's ref, so a later resume/renew for the same session reads
+   * this switch instead of the last logged request header (which would keep a
+   * stale model's selection sticky until the next explicit switch).
+   */
+  const sessionModelOverrides = new Map<SessionId, ModelSelection>()
+  /**
    * Serializes `agentPreset.select` per session. Two concurrent selects both
    * pass the blank check, and the second `unmountPresetFor` then finds nothing
    * to unmount because the first already removed the record — leaving two
@@ -1113,8 +1225,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * Install or return the session-local model selection that prompt assembly snapshots.
    *
    * Precedence, resolved on EVERY read rather than seeded once: a selection
-   * made in this process, else the session's own latest logged request/header,
-   * else the live Agent default. Re-reading keeps the two tiers exact in both
+   * made in this process for the live agent, else an explicit per-session
+   * switch recorded by `selectModel` (survives agent renewal), else the
+   * session's own latest logged request/header, else the live Agent default.
+   * Re-reading keeps the tiers exact in both
    * directions: a session with a recorded request derives its selection from
    * its log, while a blank session (New Session reuses one rather than minting
    * another) reads any default saved after it was created. There is no create-time
@@ -1128,6 +1242,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const selection: WebModelSelectionRef = {
       get current(): ModelSelection {
         if (picked !== undefined) return picked
+        const switched = sessionModelOverrides.get(agent.session.id)
+        if (switched !== undefined) return switched
         // Incrementally folded by the session, so a per-step read costs
         // O(new events) rather than a rescan.
         const logged = agent.session.requestHeader()?.config
@@ -1142,6 +1258,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
       set current(next: ModelSelection) {
         picked = next
+        sessionModelOverrides.set(agent.session.id, next)
       },
       assembled: undefined,
     }

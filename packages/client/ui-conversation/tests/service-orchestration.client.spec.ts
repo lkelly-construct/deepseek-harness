@@ -10,7 +10,7 @@ import { makeTranslate, SlotTestRuntime } from '@deepseek-ai/dsh-client-test-run
 import type { QueuedMessage, SessionFace } from '@deepseek-ai/dsh-client-runtime/client'
 import { ComposerBlockRegistry } from '../src/client/input/blocks.ts'
 import { InputHub } from '../src/client/input/hub.ts'
-import { ConversationController, UnsupportedImageMediaTypeError } from '../src/client/service.ts'
+import { ConversationController, UnsupportedFileTypeError, UnsupportedImageMediaTypeError } from '../src/client/service.ts'
 import { zh } from '../src/client/locales.ts'
 
 async function bench(readAttachment?: SessionFace['readAttachment']) {
@@ -112,6 +112,31 @@ describe('ConversationController', () => {
     ])).toThrow(UnsupportedImageMediaTypeError)
     expect(created).not.toHaveBeenCalled()
     created.mockRestore()
+    await b.runtime.dispose()
+  })
+
+  it('rejects a non-allow-listed file type at createDraftFiles', async () => {
+    const b = await bench()
+    expect(() => b.root.createDraftFiles([
+      new File([Uint8Array.of(1)], 'note.txt', { type: 'text/plain' }),
+      new File([Uint8Array.of(2)], 'movie.mp4', { type: 'video/mp4' }),
+    ])).toThrow(UnsupportedFileTypeError)
+    await b.runtime.dispose()
+  })
+
+  it('serializes text and PDF drafts into canonical prompt parts', async () => {
+    const b = await bench()
+    const textFile = new File(['x = 1'], 'main.py', { type: 'text/x-python' })
+    const pdfFile = new File([Uint8Array.of(37, 80, 68, 70)], 'doc.pdf', { type: 'application/pdf' })
+    const [textDraft, pdfDraft] = b.root.createDraftFiles([textFile, pdfFile])
+    const shell = b.root.input.for(b.runtime.sessions.scope('s1')!)
+    shell.addFiles([textDraft!.id, pdfDraft!.id])
+    const session = b.runtime.sessions.binding('s1')!.session
+    await b.scoped.sendSession(session, '', [], [textDraft!.id, pdfDraft!.id], 'queue')
+    expect(b.prompt).toHaveBeenCalledWith([
+      { type: 'text-file', name: 'main.py', mediaType: 'text/x-python', text: 'x = 1' },
+      { type: 'file', mediaType: 'application/pdf', name: 'doc.pdf', data: expect.any(String) },
+    ], 'queue')
     await b.runtime.dispose()
   })
 

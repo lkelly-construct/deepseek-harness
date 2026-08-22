@@ -30,6 +30,13 @@ export interface ComposerAttachment {
   previewUrl: string
 }
 
+/** Browser-owned text/PDF file that has not crossed the durable host boundary. */
+export interface ComposerFileAttachment {
+  kind: 'file'
+  id: DraftAttachmentId
+  file: File
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /**
@@ -499,6 +506,12 @@ export interface ComposerBarInjected {
   removeImage: ((id: DraftAttachmentId) => void) | undefined
   /** Resolve ordered input ids to browser-owned draft images. */
   draftImages: ((ids: readonly DraftAttachmentId[]) => readonly ComposerAttachment[]) | undefined
+  /** Validate + create draft files and append their ids to the session input. */
+  addFiles: ((files: readonly File[]) => string | null) | undefined
+  /** Release one file draft and remove its id from session input. */
+  removeFile: ((id: DraftAttachmentId) => void) | undefined
+  /** Resolve ordered input ids to browser-owned draft files. */
+  draftFiles: ((ids: readonly DraftAttachmentId[]) => readonly ComposerFileAttachment[]) | undefined
   /** Resolve one keyboard submission gesture against the current running state and persisted preference. */
   resolveSubmitMode: (
     running: boolean,

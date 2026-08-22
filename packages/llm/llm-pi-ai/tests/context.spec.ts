@@ -183,4 +183,31 @@ describe('pi-ai request context conversion', () => {
       history('assistant', [{ type: 'image', attachment: ref }]),
     )).toThrow(/assistant image output/)
   })
+
+  it('inlines text-file blocks as name-prefixed text on the text-only path', () => {
+    expect(toPiContext(request([
+      user([{ type: 'text-file', name: 'a.json', mediaType: 'application/json', text: '{}' }]),
+    ]))).toMatchObject({
+      messages: [{ role: 'user', content: '[file: a.json]\n{}' }],
+    })
+  })
+
+  it('inlines text-file blocks beside images on the attachment path', async () => {
+    const context = await toPiContext(request([
+      user([
+        { type: 'text-file', name: 'main.py', mediaType: 'text/x-python', text: 'x = 1' },
+        { type: 'image', attachment: ref },
+      ]),
+    ]), attachments)
+    expect(context.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '[file: main.py]\nx = 1' },
+          { type: 'image', data: 'AQ==', mimeType: 'image/png' },
+        ],
+        timestamp: 0,
+      },
+    ])
+  })
 })

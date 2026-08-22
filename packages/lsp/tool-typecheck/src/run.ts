@@ -6,6 +6,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { createRequire } from 'node:module'
+import { resolve } from 'node:path'
 import type { LspDiagnostic } from '@deepseek-ai/dsh-lsp'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { parseTscOutput } from './parse.ts'
@@ -39,12 +41,16 @@ export async function runTypecheck(
   config: TypecheckRunConfig,
   signal?: AbortSignal,
 ): Promise<LspDiagnostic[]> {
-  // Resolve before spawn so a missing `tsc` on the execution world's PATH fails the tool call with
-  // a resolvable message instead of surfacing a spawn-level rejection.
-  const tsc = await ctx.subprocess.resolveExecutable('tsc')
+  // Resolve before spawn so a missing tsc on the execution world's PATH fails the tool call with
+  // a resolvable message instead of surfacing a spawn-level rejection. On Windows, `resolveExecutable`
+  // returns `.cmd`/`.ps1` PATH shims, which the subprocess provider cannot exec directly (EINVAL);
+  // run the typescript bin through the real `node` executable instead, resolving the bin from the
+  // session workspace so the tool works with the workspace's own TypeScript install.
+  const node = await ctx.subprocess.resolveExecutable('node')
+  const tscBin = resolveTypescriptBin(workspaceRoot)
   const collect = { maxBytes: config.maxOutputBytes } as const
   const handle = ctx.subprocess.spawn({
-    argv: [tsc, '--noEmit', '--pretty', 'false', '-p', project],
+    argv: [node, tscBin, '--noEmit', '--pretty', 'false', '-p', project],
     cwd: workspaceRoot,
     stdio: {
       stdin: 'ignore',
@@ -76,4 +82,16 @@ function readText(handle: SubprocessHandle, name: 'stdout' | 'stderr'): string {
   /* v8 ignore next -- collect dispositions expose both readers by the seam contract; defensive. */
   if (reader === undefined) throw new Error('tool-typecheck: subprocess implementation dropped a requested collect stream')
   return reader.readFrom(0).text
+}
+
+/**
+ * Resolve the typescript CLI entry from the session workspace so the tool runs the workspace's own
+ * TypeScript instead of a PATH shim. Fails loud when the workspace has no typescript dependency.
+ * @param workspaceRoot - the call's session workspace cwd.
+ * @returns the absolute path to `typescript/bin/tsc` (or `bin/tsc.js` on older layouts).
+ */
+function resolveTypescriptBin(workspaceRoot: string): string {
+  const requireFromWorkspace = createRequire(resolve(workspaceRoot, 'noop.js'))
+  const bin = requireFromWorkspace.resolve('typescript/bin/tsc')
+  return resolve(bin)
 }

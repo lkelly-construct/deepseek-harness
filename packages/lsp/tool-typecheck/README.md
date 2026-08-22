@@ -21,7 +21,7 @@ The model-facing **`typecheck` tool**: an offline TypeScript diagnostics fallbac
 
 ## Deployment
 
-The execution world the subprocess service runs in must provide `tsc` on its scrubbed `PATH` (resolve via the subprocess seam's `resolveExecutable`). The tool spawns `tsc --noEmit --pretty false -p <project>` with no shell layer; the compiled project is whatever the tsconfig names.
+The tool spawns the workspace's own TypeScript through the real `node` executable (`node <typescript/bin/tsc> --noEmit --pretty false -p <project>`) with no shell layer. It never execs a `tsc` PATH shim; on Windows those resolve to `.cmd`/`.ps1` wrappers the subprocess provider cannot exec directly. `typescript/bin/tsc` is resolved from the session workspace root (via `createRequire`), so the workspace must have TypeScript installed; the compiled project is whatever the tsconfig names.
 
 ## Known Limitations and Deferred Work
 

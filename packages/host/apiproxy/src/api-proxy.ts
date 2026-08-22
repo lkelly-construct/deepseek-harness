@@ -2474,9 +2474,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 }
               }
             }
-            // A bare image paste carries no instruction; give the vision model
-            // an explicit task so it analyzes the image instead of idling.
-            const effectiveContent = hasImage && !content.some(part => part.type === 'text' && part.text.trim().length > 0)
+            // A bare image paste carries no instruction. Only a cold start (no
+            // prior conversation) needs an explicit task so the vision model
+            // does not idle; a mid-discussion screenshot is served as-is, in
+            // the context of the conversation it joins.
+            const isBareImage = hasImage && !content.some(part => part.type === 'text' && part.text.trim().length > 0)
+            const effectiveContent = isBareImage && agent.session.deriveMessages().length === 0
               ? [{ type: 'text', text: 'Describe this image in detail.' } satisfies PromptContentPart, ...content]
               : content
             const durable = await durablePromptContent(ctx, effectiveContent)

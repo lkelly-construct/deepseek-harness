@@ -203,6 +203,68 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('describes a bare image only when it starts an empty conversation', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const saveImage = vi.fn((input: { data: Uint8Array; mediaType: 'image/png'; name?: string }) => Promise.resolve({
+      attachmentId: `att-${String(input.data[0])}`,
+      mediaType: input.mediaType,
+      bytes: input.data.byteLength,
+      width: 1,
+      height: 1,
+      ...input.name === undefined ? {} : { name: input.name },
+    }))
+    const attachments = {
+      imageLimits: {
+        maxImageBytes: 4,
+        maxImagesPerMessage: 2,
+        maxMessageImageBytes: 4,
+        maxImagePixels: 4,
+        mediaTypes: ['image/png'],
+      },
+      validateImage: vi.fn((_input: { data: Uint8Array }) => Promise.resolve()),
+      saveImage,
+    }
+    ctx.provide('attachments', {
+      ...attachments,
+      saveImages(inputs: readonly Parameters<typeof saveImage>[0][]) {
+        return AttachmentStore.prototype.saveImages.call(attachments, inputs)
+      },
+    } as never)
+    const followup = vi.fn()
+    Object.assign(agent, { followup })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    const bareImage = [{ type: 'image' as const, mediaType: 'image/png' as const, data: 'AQ==', name: 'shot.png' }]
+
+    // Cold start: no prior conversation carries the task, so the vision model
+    // gets an explicit describe instruction instead of idling.
+    await api.sessions.prompt(request({ sessionId, mode: 'queue' as const, content: bareImage }))
+    expect((followup.mock.calls[0]?.[0] as UserMessage).content).toEqual([
+      { type: 'text', text: 'Describe this image in detail.' },
+      {
+        type: 'image',
+        attachment: { attachmentId: 'att-1', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'shot.png' },
+      },
+    ])
+
+    // Mid-conversation: the prior discussion supplies the context, so the
+    // screenshot is served as-is for the vision model to read in context.
+    followup.mockClear()
+    agent.session.append('user/message', {
+      id: 'prior-text', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'the error is here' }],
+    } as never, { surfaceOp: 'append' })
+    await api.sessions.prompt(request({ sessionId, mode: 'queue' as const, content: bareImage }))
+    expect((followup.mock.calls[0]?.[0] as UserMessage).content).toEqual([
+      {
+        type: 'image',
+        attachment: { attachmentId: 'att-1', mediaType: 'image/png', bytes: 1, width: 1, height: 1, name: 'shot.png' },
+      },
+    ])
+    await ctx.fiber.dispose()
+  })
+
   it('refuses a text-only selection while durable or pending image content remains visible', async () => {
     const { ctx, agent, sessionId } = await harness()
     registerTextOnly(ctx)
